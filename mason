@@ -30,7 +30,7 @@ function download_github_release {
 		curl -s https://api.github.com/repos/"$repo"/releases/"$version" |
 			jq -r --arg asset "$asset" '.assets[] | select(.name==$asset).browser_download_url'
 	)"
-	curl -s -L -o "$dir/$asset" -H "Accept: application/octet-stream" -H "Authorization: token $MASON_GITHUB_TOKEN" "$download_link"
+	curl -L -o "$dir/$asset" -H "Accept: application/octet-stream" -H "Authorization: token $MASON_GITHUB_TOKEN" "$download_link"
 }
 
 function download_registry {
@@ -54,6 +54,18 @@ function parse_pkg_source_id {
 	local args=""
 	[[ "$fullname" == *"?"* ]] && args=${fullname#*\?}
 	echo "$type $package $version $args"
+}
+
+arch_map() {
+	case "$(uname -s)-$(uname -m)" in
+	Linux-aarch64) echo "linux_arm64" ;;
+	Linux-arm64) echo "linux_arm64" ;;
+	Linux-x86_64) echo "linux_x64" ;;
+	Linux-i686) echo "linux_x86" ;;
+	Darwin-arm64) echo "darwin_arm64" ;;
+	Darwin-x86_64) echo "darwin_x64" ;;
+	*) echo "mason: Unsupported arch" && exit 1 ;;
+	esac
 }
 
 function install {
@@ -90,6 +102,27 @@ function install {
 		source "./venv/bin/activate"
 		pip install "$package"${extra+"[$extra]"}=="$version"
 		;;
+	github)
+		local -r asset=$(jq -r --arg target "$(arch_map)" --arg version "$version" --arg stripped_version "${version#v}" '
+			.source.asset[]
+				| select(
+					(.target | type == "array" and index($target))
+					or .target == $target
+					or .target == "unix"
+				)
+				| .file
+				| gsub("{{version}}"; $version)
+				| gsub("{{ version \\| strip_prefix \\\"v\\\" }}"; $stripped_version)
+			' <<<"$pkg")
+
+		download_github_release "$package" "$asset" "$version"
+
+		case $asset in
+		*.tar.gz) tar -xzf "$asset" ;;
+		*.gz) gunzip "$asset" ;;
+		*) echo "mason: Unsupported file type: $asset" && exit 1 ;;
+		esac
+		;;
 	*) echo "mason: $type not implemented" && exit 1 ;;
 	esac
 
@@ -101,7 +134,7 @@ function install {
 		case $type in
 		npm) bin_path=./node_modules/.bin/"$package" ;;
 		pypi) bin_path=./venv/bin/"$package" ;;
-		*) echo "mason: $type not implemented" && exit 1 ;;
+		*) bin_path=./$key ;;
 		esac
 
 		ln -sf "$(realpath "$bin_path")" "$MASON_DATA_DIR"/bin/"$key"
