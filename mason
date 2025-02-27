@@ -28,31 +28,57 @@ curl -s -L -o "$MASON_CACHE_DIR"/registry.json.zip -H "Accept: application/octet
 
 unzip -q -o -d "$MASON_CACHE_DIR" "$MASON_CACHE_DIR"/registry.json.zip
 
-name=$1
-pkg=$(jq <"$MASON_CACHE_DIR"/registry.json --arg name "$name" '.[] | select(.name==$name)')
-pkg_source_id=$(echo "$pkg" | jq -r '.source.id[4:]')
+function install {
+	type=$1
+	package=$2
+	version=$3
 
-installer=${pkg_source_id%/*}
-installee=${pkg_source_id#*/}
+	if [[ ! -d $MASON_DATA_DIR/packages/$package ]]; then
+		mkdir -p "$MASON_DATA_DIR"/packages/"$package"
+	fi
 
-if [[ ! -d "$MASON_DATA_DIR"/packages/"$name" ]]; then
-	mkdir -p "$MASON_DATA_DIR"/packages/"$name"
-fi
+	cd "$MASON_DATA_DIR"/packages/"$package"
 
-cd "$MASON_DATA_DIR"/packages/"$name"
-
-case "$installer" in
-npm) npm install "$installee" ;;
-*) exit ;;
-esac
-
-echo "$pkg" | jq -r '.bin | to_entries[] | "\(.key) \(.value)"' | while read -r key value; do
-	installer=${value%:*}
-	installee=${value#*:}
-	bin_path=""
-	case "$installer" in
-	npm) bin_path=./node_modules/.bin/"$installee" ;;
+	case "$type" in
+	npm) npm install "$package"@"$version" ;;
 	*) exit ;;
 	esac
-	ln -sf "$(realpath "$bin_path")" "$MASON_DATA_DIR"/bin/"$key"
-done
+}
+
+function link {
+	bins=$1
+	echo "$bins" | while read -r key value; do
+		type=${value%:*}
+		installee=${value#*:}
+		bin_path=""
+		case "$type" in
+		npm) bin_path=./node_modules/.bin/"$installee" ;;
+		*) exit ;;
+		esac
+		ln -sf "$(realpath "$bin_path")" "$MASON_DATA_DIR"/bin/"$key"
+	done
+}
+
+function parse_pkg_source_id {
+	function parse_pkg_source_id {
+		local input=${1#pkg:}
+		local type=${input%%/*}
+		local fullname=${input#*/}
+		local version=${fullname##*@}
+		local package=${fullname%@"$version"}
+		package=${package//%40/@}
+		echo "$type $package $version"
+	}
+}
+
+name=$1
+
+pkg=$(jq <"$MASON_CACHE_DIR"/registry.json --arg name "$name" '.[] | select(.name==$name)')
+
+pkg_source_id=$(echo "$pkg" | jq -r '.source.id[4:]')
+
+parse_pkg_source_id "$pkg_source_id"
+read -r type package version <<<"$(parse_pkg_source_id "$pkg_source_id")"
+
+install "$type" "$package" "$version"
+link "$(echo "$pkg" | jq -r '.bin | to_entries[] | "\(.key) \(.value)"')"
