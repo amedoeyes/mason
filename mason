@@ -70,14 +70,19 @@ function install {
 
 	read -r type package version <<<"$(parse_pkg_source_id "$(jq -r '.source.id' <<<"$pkg")")"
 
-	if [[ ! -d $MASON_DATA_DIR/packages/$package ]]; then
-		mkdir -p "$MASON_DATA_DIR"/packages/"$package"
+	if [[ ! -d $MASON_DATA_DIR/packages/$name ]]; then
+		mkdir -p "$MASON_DATA_DIR"/packages/"$name"
 	fi
 
-	cd "$MASON_DATA_DIR"/packages/"$package"
+	cd "$MASON_DATA_DIR"/packages/"$name"
 
 	case $type in
 	npm) npm install "$package"@"$version" ;;
+	pypi)
+		python -m venv venv
+		source "./venv/bin/activate"
+		pip install "$package"=="$version"
+		;;
 	*) echo "mason: $type not implemented" && exit 1 ;;
 	esac
 
@@ -88,6 +93,7 @@ function install {
 
 		case $type in
 		npm) bin_path=./node_modules/.bin/"$package" ;;
+		pypi) bin_path=./venv/bin/"$package" ;;
 		*) "mason: $type not implemented" && exit 1 ;;
 		esac
 
@@ -109,7 +115,7 @@ while [[ $# -gt 0 ]]; do
 		;;
 	update-repo) download_registry ;;
 	*)
-		echo "Unknown argument: $1"
+		echo "Unknown argument: $arg"
 		exit 1
 		;;
 	esac
