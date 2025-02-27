@@ -43,12 +43,32 @@ function download_registry {
 	rm checksums.txt
 }
 
-download_registry
+function parse_pkg_source_id {
+	local input=${1#pkg:}
+	local type=${input%%/*}
+	local fullname=${input#*/}
+	local version=${fullname#*@}
+	local package=${fullname%@*}
+	package=${package//%40/@}
+	echo "$type $package $version"
+}
 
 function install {
-	type=$1
-	package=$2
-	version=$3
+	local name=$1
+	[[ -z $name ]] && name=$(
+		jq -r '.[] | "\(.name)\t\(.categories | join(", "))\t\(.languages | join(", "))"' <"$MASON_CACHE_DIR"/registry.json |
+			column -t -s $'\t' |
+			fzf |
+			awk '{ print $1 }'
+	)
+
+	[[ -z $name ]] && exit 1
+
+	local -r pkg=$(jq <"$MASON_CACHE_DIR"/registry.json --arg name "$name" '.[] | select(.name==$name)')
+
+	[[ -z $pkg ]] && echo "mason: '$name' not found" && exit 1
+
+	read -r type package version <<<"$(parse_pkg_source_id "$(jq -r '.source.id' <<<"$pkg")")"
 
 	if [[ ! -d $MASON_DATA_DIR/packages/$package ]]; then
 		mkdir -p "$MASON_DATA_DIR"/packages/"$package"
@@ -56,58 +76,40 @@ function install {
 
 	cd "$MASON_DATA_DIR"/packages/"$package"
 
-	case "$type" in
+	case $type in
 	npm) npm install "$package"@"$version" ;;
-	*) exit ;;
+	*) echo "mason: $type not implemented" && exit 1 ;;
 	esac
-}
 
-function link {
-	bins=$1
-	echo "$bins" | while read -r key value; do
-		type=${value%:*}
-		installee=${value#*:}
-		bin_path=""
-		case "$type" in
-		npm) bin_path=./node_modules/.bin/"$installee" ;;
-		*) exit ;;
+	jq -r '.bin | to_entries[] | "\(.key) \(.value)"' <<<"$pkg" | while read -r key value; do
+		local type=${value%:*}
+		local package=${value#*:}
+		local bin_path=""
+
+		case $type in
+		npm) bin_path=./node_modules/.bin/"$package" ;;
+		*) "mason: $type not implemented" && exit 1 ;;
 		esac
+
 		ln -sf "$(realpath "$bin_path")" "$MASON_DATA_DIR"/bin/"$key"
 	done
 }
 
-function parse_pkg_source_id {
-	function parse_pkg_source_id {
-		local input=${1#pkg:}
-		local type=${input%%/*}
-		local fullname=${input#*/}
-		local version=${fullname##*@}
-		local package=${fullname%@"$version"}
-		package=${package//%40/@}
-		echo "$type $package $version"
-	}
-}
+(($# == 0)) && exit 1
 
-name=$1
-if [[ -z $name ]]; then
-	name=$(
-		jq -r '.[] | "\(.name)\t\(.categories | join(", "))\t\(.languages | join(", "))"' <"$MASON_CACHE_DIR"/registry.json |
-			column -t -s $'\t' |
-			fzf |
-			awk '{ print $1 }'
-	)
-fi
-
-[[ -z $name ]] && exit 1
-
-pkg=$(jq <"$MASON_CACHE_DIR"/registry.json --arg name "$name" '.[] | select(.name==$name)')
-
-[[ -z $pkg ]] && echo "mason: '$name' not found" && exit 1
-
-pkg_source_id=$(echo "$pkg" | jq -r '.source.id[4:]')
-
-parse_pkg_source_id "$pkg_source_id"
-read -r type package version <<<"$(parse_pkg_source_id "$pkg_source_id")"
-
-install "$type" "$package" "$version"
-link "$(echo "$pkg" | jq -r '.bin | to_entries[] | "\(.key) \(.value)"')"
+while [[ $# -gt 0 ]]; do
+	arg=$1
+	shift
+	case $arg in
+	install)
+		name=$1
+		shift
+		download_registry
+		install "$name"
+		;;
+	*)
+		echo "Unknown argument: $1"
+		exit 1
+		;;
+	esac
+done
