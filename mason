@@ -48,9 +48,12 @@ function parse_pkg_source_id {
 	local type=${input%%/*}
 	local fullname=${input#*/}
 	local version=${fullname#*@}
+	version=${version%\?*}
 	local package=${fullname%@*}
 	package=${package//%40/@}
-	echo "$type $package $version"
+	local args=""
+	[[ "$fullname" == *"?"* ]] && args=${fullname#*\?}
+	echo "$type $package $version $args"
 }
 
 function install {
@@ -68,7 +71,7 @@ function install {
 
 	[[ -z $pkg ]] && echo "mason: '$name' not found" && exit 1
 
-	read -r type package version <<<"$(parse_pkg_source_id "$(jq -r '.source.id' <<<"$pkg")")"
+	read -r type package version args <<<"$(parse_pkg_source_id "$(jq -r '.source.id' <<<"$pkg")")"
 
 	if [[ ! -d $MASON_DATA_DIR/packages/$name ]]; then
 		mkdir -p "$MASON_DATA_DIR"/packages/"$name"
@@ -79,9 +82,13 @@ function install {
 	case $type in
 	npm) npm install "$package"@"$version" ;;
 	pypi)
+		local extra=""
+		if [[ "$args" == extra=* ]]; then
+			extra="${args#*=}"
+		fi
 		python -m venv venv
 		source "./venv/bin/activate"
-		pip install "$package"=="$version"
+		pip install "$package"${extra+"[$extra]"}=="$version"
 		;;
 	*) echo "mason: $type not implemented" && exit 1 ;;
 	esac
@@ -94,7 +101,7 @@ function install {
 		case $type in
 		npm) bin_path=./node_modules/.bin/"$package" ;;
 		pypi) bin_path=./venv/bin/"$package" ;;
-		*) "mason: $type not implemented" && exit 1 ;;
+		*) echo "mason: $type not implemented" && exit 1 ;;
 		esac
 
 		ln -sf "$(realpath "$bin_path")" "$MASON_DATA_DIR"/bin/"$key"
