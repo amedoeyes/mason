@@ -72,8 +72,20 @@ function parse_pkg_source_id {
 }
 
 name=$1
+if [[ -z $name ]]; then
+	name=$(
+		jq -r '.[] | "\(.name)\t\(.categories | join(", "))\t\(.languages | join(", "))"' <"$MASON_CACHE_DIR"/registry.json |
+			column -t -s $'\t' |
+			fzf |
+			awk '{ print $1 }'
+	)
+fi
+
+[[ -z $name ]] && exit 1
 
 pkg=$(jq <"$MASON_CACHE_DIR"/registry.json --arg name "$name" '.[] | select(.name==$name)')
+
+[[ -z $pkg ]] && echo "mason: '$name' not found" && exit 1
 
 pkg_source_id=$(echo "$pkg" | jq -r '.source.id[4:]')
 
