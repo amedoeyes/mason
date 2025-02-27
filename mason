@@ -1,8 +1,8 @@
 #!/bin/bash
 
-MASON_REPO=mason-org/mason-registry
-MASON_CACHE_DIR=$XDG_CACHE_HOME/mason
-MASON_DATA_DIR=$XDG_DATA_HOME/mason
+MASON_REPO=${MASON_REPO-"mason-org/mason-registry"}
+MASON_CACHE_DIR=${MASON_CACHE_DIR-"$XDG_CACHE_HOME/mason"}
+MASON_DATA_DIR=${MASON_DATA_DIR-"$XDG_DATA_HOME/mason"}
 
 if [[ ! -d $MASON_CACHE_DIR ]]; then
 	mkdir -p "$MASON_CACHE_DIR"
@@ -20,13 +20,30 @@ if [[ ! -d $MASON_DATA_DIR/packages ]]; then
 	mkdir -p "$MASON_DATA_DIR"/packages
 fi
 
-curl -s -L -o "$MASON_CACHE_DIR"/checksums.txt -H "Accept: application/octet-stream" \
-	"$(curl -s https://api.github.com/repos/$MASON_REPO/releases/latest | jq -r '.assets[] | select(.name=="checksums.txt") | .browser_download_url')"
+function download_github_release {
+	local repo=$1
+	local asset=$2
+	local version=${3-latest}
+	local dir=${4-./}
+	[[ $version != "latest" ]] && version=tags/$version
+	local -r download_link="$(
+		curl -s https://api.github.com/repos/"$repo"/releases/"$version" |
+			jq -r --arg asset "$asset" '.assets[] | select(.name==$asset).browser_download_url'
+	)"
+	curl -s -L -o "$dir/$asset" -H "Accept: application/octet-stream" -H "Authorization: token $MASON_GITHUB_TOKEN" "$download_link"
+}
 
-curl -s -L -o "$MASON_CACHE_DIR"/registry.json.zip -H "Accept: application/octet-stream" \
-	"$(curl -s https://api.github.com/repos/$MASON_REPO/releases/latest | jq -r '.assets[] | select(.name=="registry.json.zip") | .browser_download_url')"
+function download_registry {
+	cd "$MASON_CACHE_DIR"
+	download_github_release "$MASON_REPO" checksums.txt
+	if ! sha256sum --status -c ./checksums.txt --ignore-missing; then
+		download_github_release "$MASON_REPO" registry.json.zip
+		unzip -q -o -d "$MASON_CACHE_DIR" ./registry.json.zip && rm "$MASON_CACHE_DIR"/registry.json.zip
+	fi
+	rm checksums.txt
+}
 
-unzip -q -o -d "$MASON_CACHE_DIR" "$MASON_CACHE_DIR"/registry.json.zip
+download_registry
 
 function install {
 	type=$1
