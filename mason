@@ -104,9 +104,10 @@ while [[ $# -gt 0 ]]; do
 	install)
 		name=$1
 		shift
-		download_registry
+		[[ ! -f $MASON_CACHE_DIR/registry.json ]] && download_registry
 		install "$name"
 		;;
+	update-repo) download_registry ;;
 	*)
 		echo "Unknown argument: $1"
 		exit 1
