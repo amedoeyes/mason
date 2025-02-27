@@ -1,0 +1,58 @@
+#!/bin/bash
+
+MASON_REPO=mason-org/mason-registry
+MASON_CACHE_DIR=$XDG_CACHE_HOME/mason
+MASON_DATA_DIR=$XDG_DATA_HOME/mason
+
+if [[ ! -d $MASON_CACHE_DIR ]]; then
+	mkdir -p "$MASON_CACHE_DIR"
+fi
+
+if [[ ! -d $MASON_DATA_DIR ]]; then
+	mkdir -p "$MASON_DATA_DIR"
+fi
+
+if [[ ! -d $MASON_DATA_DIR/bin ]]; then
+	mkdir -p "$MASON_DATA_DIR"/bin
+fi
+
+if [[ ! -d $MASON_DATA_DIR/packages ]]; then
+	mkdir -p "$MASON_DATA_DIR"/packages
+fi
+
+curl -s -L -o "$MASON_CACHE_DIR"/checksums.txt -H "Accept: application/octet-stream" \
+	"$(curl -s https://api.github.com/repos/$MASON_REPO/releases/latest | jq -r '.assets[] | select(.name=="checksums.txt") | .browser_download_url')"
+
+curl -s -L -o "$MASON_CACHE_DIR"/registry.json.zip -H "Accept: application/octet-stream" \
+	"$(curl -s https://api.github.com/repos/$MASON_REPO/releases/latest | jq -r '.assets[] | select(.name=="registry.json.zip") | .browser_download_url')"
+
+unzip -q -o -d "$MASON_CACHE_DIR" "$MASON_CACHE_DIR"/registry.json.zip
+
+name=$1
+pkg=$(jq <"$MASON_CACHE_DIR"/registry.json --arg name "$name" '.[] | select(.name==$name)')
+pkg_source_id=$(echo "$pkg" | jq -r '.source.id[4:]')
+
+installer=${pkg_source_id%/*}
+installee=${pkg_source_id#*/}
+
+if [[ ! -d "$MASON_DATA_DIR"/packages/"$name" ]]; then
+	mkdir -p "$MASON_DATA_DIR"/packages/"$name"
+fi
+
+cd "$MASON_DATA_DIR"/packages/"$name"
+
+case "$installer" in
+npm) npm install "$installee" ;;
+*) exit ;;
+esac
+
+echo "$pkg" | jq -r '.bin | to_entries[] | "\(.key) \(.value)"' | while read -r key value; do
+	installer=${value%:*}
+	installee=${value#*:}
+	bin_path=""
+	case "$installer" in
+	npm) bin_path=./node_modules/.bin/"$installee" ;;
+	*) exit ;;
+	esac
+	ln -sf "$(realpath "$bin_path")" "$MASON_DATA_DIR"/bin/"$key"
+done
