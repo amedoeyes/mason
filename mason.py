@@ -234,7 +234,7 @@ def install(args) -> None:
                         dist = Path(dist)
                         dist.mkdir(parents=True, exist_ok=True)
                         download_github_release(package, ref, version, dist)
-                        asset_path = dist / asset
+                        asset_path = dist / ref
                         if extractable(asset_path):
                             extract_file(asset_path, dist)
                     else:
