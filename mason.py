@@ -109,7 +109,7 @@ def download_registry() -> None:
         else:
             print("Updating registry...")
         download_github_release(MASON_REPO, "registry.json.zip", "latest", MASON_CACHE_DIR)
-        extract_file(MASON_CACHE_DIR / "registry.json.zip")
+        extract_file(MASON_CACHE_DIR / "registry.json.zip", MASON_CACHE_DIR)
     else:
         print("Registry up-to-date")
 
