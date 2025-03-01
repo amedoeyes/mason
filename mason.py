@@ -114,7 +114,7 @@ def download_registry() -> None:
         print("Registry up-to-date")
 
 
-def is_current_target(target: str) -> bool:
+def is_current_target(target: str | list[str]) -> bool:
     system = platform.system().lower()
     arch = platform.machine().lower()
 
@@ -151,7 +151,11 @@ def is_current_target(target: str) -> bool:
     elif system == "windows":
         possible_targets.add("win")
 
-    return target in possible_targets
+    match target:
+        case str():
+            return target in possible_targets
+        case list():
+            return any(t in possible_targets for t in target)
 
 
 def parse_source_id(source_id: str) -> tuple[str, str, str, dict | None]:
