@@ -275,7 +275,6 @@ def install(args) -> None:
                     raise Exception("Could not find asset")
                 assets = asset if isinstance(asset, list) else [asset]
                 for a in assets:
-                    continue
                     process_asset(a)
             else:
                 if (package_dir / ".git").exists():
@@ -305,15 +304,18 @@ def install(args) -> None:
             type, bin = value.split(":")
             match type:
                 case "npm":
-                    bin_path = package_dir / f"./node_modules/.bin/{bin}"
+                    bin_path = package_dir / f"node_modules/.bin/{bin}"
                 case "pypi":
-                    bin_path = package_dir / f"./venv/bin/{bin}"
+                    bin_path = package_dir / f"venv/bin/{bin}"
                 case "exec":
                     bin_path = package_dir / key
                     write_exec_script(bin_path, str(Path(bin).absolute()))
                 case "dotnet":
                     bin_path = package_dir / key
                     write_exec_script(bin_path, f"dotnet {Path(bin).absolute()}")
+                case "pyvenv":
+                    bin_path = package_dir / key
+                    write_exec_script(bin_path, f"{package_dir / 'venv/bin/python'} -m {bin}")
                 case _:
                     raise Exception(f"'{type}' not implemented")
         else:
