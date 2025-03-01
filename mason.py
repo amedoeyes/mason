@@ -201,7 +201,10 @@ def get_pkg(name: str) -> Any:
         {
             "version": version,
             "source": {
-                "asset": next((a for a in pkg["source"].get("asset", []) if is_current_target(a.get("target"))), None),
+                "asset": process(
+                    next((a for a in pkg["source"].get("asset", []) if is_current_target(a.get("target"))), None),
+                    {"version": version},
+                ),
                 "build": next((b for b in pkg["source"].get("build", []) if is_current_target(b.get("target"))), None),
             },
         },
