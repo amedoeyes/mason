@@ -348,8 +348,10 @@ def search(args) -> None:
         name = args.query in pkg["name"]
         desc = args.query in pkg["description"]
         if (name or desc) and cat and lang:
-            print(pkg["name"])
-            print(f"    {pkg['description'].rstrip('\n').replace('\n', ' ')}")
+            _, _, version, _ = parse_source_id(pkg["source"]["id"])
+            print(f"{pkg['name']} {version}")
+            print(f"    Description: {pkg['description'].rstrip('\n').replace('\n', ' ')}")
+            print(f"    Homepage: {pkg['homepage']}")
             print(f"    Categories: {', '.join(pkg['categories'])}")
             if len(pkg["languages"]) > 0:
                 print(f"    Languages: {', '.join(pkg['languages'])}")
