@@ -1,6 +1,5 @@
 #!/bin/python3
 
-import shlex
 import argparse
 import gzip
 import hashlib
@@ -8,6 +7,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -28,6 +28,7 @@ MASON_DATA_DIR = Path(
     os.getenv("MASON_DATA_DIR", os.path.join(os.getenv("XDG_DATA_HOME", "~/.local/share"), "mason"))
 ).expanduser()
 MASON_BIN_DIR = MASON_DATA_DIR / "bin"
+MASON_SHARE_DIR = MASON_DATA_DIR / "share"
 MASON_PACKAGES_DIR = MASON_DATA_DIR / "packages"
 MASON_REGISTRY = MASON_CACHE_DIR / "registry.json"
 
@@ -290,9 +291,19 @@ def install(args) -> None:
         else:
             bin_path = package_dir / value
         dist = MASON_BIN_DIR / key
-        if dist.exists() or dist.is_symlink():
+        if dist.is_symlink():
             dist.unlink()
         os.symlink(bin_path.absolute(), dist)
+
+    for key, value in pkg.get("share", {}).items():
+        dist_dir = MASON_SHARE_DIR / key
+        share_path = package_dir / value
+        dist_dir.mkdir(parents=True, exist_ok=True)
+        for file in share_path.iterdir():
+            dist = dist_dir / file.name
+            if dist.is_symlink():
+                dist.unlink()
+            dist.symlink_to(file)
 
 
 def search(args) -> None:
@@ -315,7 +326,7 @@ def search(args) -> None:
 
 if __name__ == "__main__":
     try:
-        for dir in [MASON_CACHE_DIR, MASON_DATA_DIR, MASON_BIN_DIR, MASON_PACKAGES_DIR]:
+        for dir in [MASON_CACHE_DIR, MASON_DATA_DIR, MASON_BIN_DIR, MASON_SHARE_DIR, MASON_PACKAGES_DIR]:
             dir.mkdir(parents=True, exist_ok=True)
 
         if not MASON_REGISTRY.exists():
