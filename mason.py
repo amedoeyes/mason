@@ -1,5 +1,6 @@
 #!/bin/python3
 
+import shlex
 import argparse
 import gzip
 import hashlib
@@ -31,23 +32,31 @@ MASON_PACKAGES_DIR = MASON_DATA_DIR / "packages"
 MASON_REGISTRY = MASON_CACHE_DIR / "registry.json"
 
 
-def extract_file(file_path: Path, extract_path=Path(".")) -> None:
+def extract_file(file_path: Path, extract_path=Path(".")) -> Path:
     print(f"Extracting {file_path}...")
+    extracted_item = None
     match file_path.suffixes[-2:]:
         case [".tar", ".gz"] | [".tgz"]:
             with tarfile.open(file_path, "r:gz") as tar:
                 tar.extractall(path=extract_path, filter="data")
+                extracted_item = extract_path / tar.getnames()[0]
         case [".tar"]:
             with tarfile.open(file_path, "r:") as tar:
                 tar.extractall(path=extract_path, filter="data")
+                extracted_item = extract_path / tar.getnames()[0]
         case [".gz"]:
-            with gzip.open(file_path, "rb") as f_in, open(extract_path / file_path.stem, "wb") as f_out:
+            output_file = extract_path / file_path.stem
+            with gzip.open(file_path, "rb") as f_in, open(output_file, "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
+            extracted_item = output_file
         case [".zip"]:
             with zipfile.ZipFile(file_path, "r") as zip_ref:
                 zip_ref.extractall(extract_path)
+                extracted_item = extract_path / zip_ref.namelist()[0]
         case _:
             raise Exception(f"Unsupported file type: {file_path}")
+    extracted_path = extract_path / extracted_item if extracted_item else extract_path
+    return extracted_path.resolve()
 
 
 def verify_checksums(checksum_file: Path) -> bool:
@@ -159,17 +168,18 @@ def process_placeholders(obj, context) -> Any:
     return obj
 
 
-def install(package_name: str) -> None:
+def install(args) -> None:
     with open(MASON_REGISTRY, "r") as f:
         packages = json.load(f)
 
-    pkg = next((p for p in packages if p["name"] == package_name), None)
+    pkg = next((p for p in packages if p["name"] == args.package), None)
     if not pkg:
-        raise Exception(f"package '{package_name}' not found")
+        raise Exception(f"package '{args.package}' not found")
 
-    package_dir = MASON_PACKAGES_DIR / package_name
+    package_dir = MASON_PACKAGES_DIR / args.package
     package_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(package_dir)
+    os.environ["PWD"] = os.getcwd()
 
     source_id = pkg["source"]["id"]
     source_id = source_id[4:].split("/", 1)
@@ -189,7 +199,11 @@ def install(package_name: str) -> None:
                 "asset": next(
                     (asset for asset in pkg["source"].get("asset", []) if is_current_target(asset.get("target"))),
                     None,
-                )
+                ),
+                "build": next(
+                    (build for build in pkg["source"].get("build", []) if is_current_target(build.get("target"))),
+                    None,
+                ),
             },
         },
     )
@@ -202,16 +216,36 @@ def install(package_name: str) -> None:
             subprocess.run(["python", "-m", "venv", "venv"])
             subprocess.run(["./venv/bin/pip", "install", f"{package}{extra}=={version}"])
         case "github":
-            file = next(
-                (a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])),
-                None,
-            )
-            if file is None:
-                raise Exception("Could not find asset")
-            download_github_release(package, file, version)
-            extract_file(Path(file))
+            if "asset" in pkg["source"]:
+                file = next(
+                    (a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])),
+                    None,
+                )
+                if file is None:
+                    raise Exception("Could not find asset")
+                download_github_release(package, file, version)
+                extract_file(Path(file))
+            else:
+                subprocess.run(
+                    ["git", "clone", "--depth=1", f"https://github.com/{package}.git", "--branch", version, "."]
+                )
+
         case _:
             raise Exception(f"'{type}' not implemented")
+
+    if "build" in pkg["source"]:
+        print("Building...")
+        build = next(
+            (a["run"] for a in pkg["source"]["build"] if is_current_target(a["target"])),
+            None,
+        )
+        if build is None:
+            raise Exception("Could not find build")
+
+        for cmd in build.splitlines():
+            print(f"Running {cmd}")
+            if cmd.strip():
+                subprocess.run(shlex.split(os.path.expandvars(cmd)), check=True)
 
     for key, value in pkg.get("bin", {}).items():
         dist = MASON_BIN_DIR / key
@@ -232,14 +266,14 @@ def install(package_name: str) -> None:
         os.symlink(bin_path.absolute(), dist)
 
 
-def search(query: str, category: str | None, language: str | None) -> None:
+def search(args) -> None:
     with open(MASON_REGISTRY, "r") as f:
         packages = json.load(f)
     for pkg in packages:
-        cat = not category or any(category.lower() == cat.lower() for cat in pkg["categories"])
-        lang = not language or any(language.lower() == lang.lower() for lang in pkg["languages"])
-        name = query in pkg["name"]
-        desc = query in pkg["description"]
+        cat = not args.category or any(args.category.lower() == cat.lower() for cat in pkg["categories"])
+        lang = not args.language or any(args.language.lower() == lang.lower() for lang in pkg["languages"])
+        name = args.query in pkg["name"]
+        desc = args.query in pkg["description"]
         if (name or desc) and cat and lang:
             print(pkg["name"])
             print(f"    {pkg['description'].rstrip('\n').replace('\n', ' ')}")
@@ -248,7 +282,6 @@ def search(query: str, category: str | None, language: str | None) -> None:
                 print(f"    Languages: {', '.join(pkg['languages'])}")
             print(f"    Licenses: {', '.join(pkg['licenses'])}")
             print()
-    exit(0)
 
 
 if __name__ == "__main__":
@@ -259,24 +292,30 @@ if __name__ == "__main__":
         if not MASON_REGISTRY.exists():
             download_registry()
 
-        parser = argparse.ArgumentParser(
-            formatter_class=lambda prog: argparse.HelpFormatter(
-                prog,
-                width=80,
-                max_help_position=1000,
-            )
-        )
-        parser.add_argument("-i", "--install", metavar="PACKAGE", help="Install a specific package")
-        parser.add_argument("-s", "--search", nargs="?", const="", metavar="QUERY", help="Search registry")
-        parser.add_argument(
+        def formatter(prog):
+            return argparse.HelpFormatter(prog, width=80, max_help_position=1000)
+
+        parser = argparse.ArgumentParser(formatter_class=formatter)
+        parser.set_defaults(func=lambda _: None)
+        subparsers = parser.add_subparsers()
+
+        parser_install = subparsers.add_parser("install", help="install a specific package", formatter_class=formatter)
+        parser_install.set_defaults(func=install)
+        parser_install.add_argument("package", help="name of package to install")
+
+        parser_search = subparsers.add_parser("search", help="search registry", formatter_class=formatter)
+        parser_search.set_defaults(func=search)
+        parser_search.add_argument("query", nargs="?", default="", help="search query")
+        parser_search.add_argument(
             "-c",
             "--category",
             choices=["dap", "formatter", "linter", "lsp"],
             metavar="CATEGORY",
-            help="Specify category for search",
+            help="specify category for search",
         )
-        parser.add_argument("-l", "--language", metavar="LANGUAGE", help="Specify language for search")
-        parser.add_argument("--update-registry", action="store_true", help="Update Mason registry")
+        parser_search.add_argument("-l", "--language", metavar="language", help="specify language for search")
+
+        parser.add_argument("-u", "--update-registry", action="store_true", help="update mason registry")
 
         if len(sys.argv) == 1:
             parser.print_help()
@@ -287,10 +326,7 @@ if __name__ == "__main__":
         if args.update_registry:
             download_registry()
 
-        if args.search is not None:
-            search(args.search, args.category, args.language)
+        args.func(args)
 
-        if args.install:
-            install(args.install)
     except Exception as e:
         print(f"{sys.argv[0]}: {e}")
