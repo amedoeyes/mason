@@ -227,14 +227,37 @@ def install(args) -> None:
             subprocess.run(["python", "-m", "venv", "venv"])
             subprocess.run(["./venv/bin/pip", "install", f"{package}{extra}=={version}"])
         case "github":
+
+            def process_asset(asset: str) -> None:
+                if ":" in asset:
+                    ref, dist = asset.split(":", 1)
+                    if dist[-1] == "/":
+                        dist = Path(dist)
+                        dist.mkdir(parents=True, exist_ok=True)
+                        download_github_release(package, ref, version, dist)
+                        asset_path = dist / asset
+                        if extractable(asset_path):
+                            extract_file(asset_path, dist)
+                    else:
+                        download_github_release(package, ref, version)
+                        asset_path = Path(ref).replace(dist)
+                        if extractable(asset_path):
+                            extract_file(asset_path)
+                else:
+                    download_github_release(package, asset, version)
+                    asset_path = Path(asset)
+                    if extractable(asset_path):
+                        extract_file(asset_path)
+
             if "asset" in pkg["source"]:
                 asset = next((a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])), None)
                 if asset is None:
                     raise Exception("Could not find asset")
-                download_github_release(package, asset, version)
-                extract_file(Path(asset))
+                assets = asset if isinstance(asset, list) else [asset]
+                for a in assets:
+                    process_asset(a)
             else:
-                if os.path.exists(package_dir / ".git"):
+                if (package_dir / ".git").exists():
                     subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", version], check=True)
                     subprocess.run(["git", "reset", "--hard", version], check=True)
                 else:
