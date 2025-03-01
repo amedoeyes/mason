@@ -165,8 +165,7 @@ def parse_source_id(source_id: str) -> tuple[str, str, str, dict | None]:
         args = {key: value}
     else:
         version = rest
-    package = unquote(package)
-    return (type, package, version, args)
+    return (type, unquote(package), unquote(version), args)
 
 
 def get_pkg(name: str) -> Any:
