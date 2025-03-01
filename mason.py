@@ -275,6 +275,7 @@ def install(args) -> None:
                     raise Exception("Could not find asset")
                 assets = asset if isinstance(asset, list) else [asset]
                 for a in assets:
+                    continue
                     process_asset(a)
             else:
                 if (package_dir / ".git").exists():
@@ -310,6 +311,9 @@ def install(args) -> None:
                 case "exec":
                     bin_path = package_dir / key
                     write_exec_script(bin_path, str(Path(bin).absolute()))
+                case "dotnet":
+                    bin_path = package_dir / key
+                    write_exec_script(bin_path, f"dotnet {Path(bin).absolute()}")
                 case _:
                     raise Exception(f"'{type}' not implemented")
         else:
