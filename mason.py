@@ -154,101 +154,105 @@ def is_current_target(target: str) -> bool:
     return target in possible_targets
 
 
-def convert_to_jinja_syntax(template_str):
-    return re.sub(r"\|\|?\s*strip_prefix\s*\\?\"(.*?)\\?\"", r"| replace('\1', '')", template_str)
+def parse_source_id(source_id: str) -> tuple[str, str, str, dict | None]:
+    type, rest = source_id[4:].split("/", 1)
+    package, rest = rest.split("@", 1)
+    version = ""
+    args = None
+    if "?" in rest:
+        version, rest = rest.split("?", 1)
+        key, value = rest.split("=", 1)
+        args = {key: value}
+    else:
+        version = rest
+    package = unquote(package)
+    return (type, package, version, args)
 
 
-def process_placeholders(obj, context) -> Any:
-    if isinstance(obj, dict):
-        return {k: process_placeholders(v, context) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [process_placeholders(i, context) for i in obj]
-    elif isinstance(obj, str):
-        return Template(convert_to_jinja_syntax(obj)).render(context)
-    return obj
+def get_pkg(name: str) -> Any:
+    def to_jinja_syntax(s):
+        return re.sub(r"\|\|?\s*strip_prefix\s*\\?\"(.*?)\\?\"", r"| replace('\1', '')", s)
 
+    def process(obj, ctx):
+        match obj:
+            case dict():
+                return {k: process(v, ctx) for k, v in obj.items()}
+            case list():
+                return [process(v, ctx) for v in obj]
+            case str():
+                return Template(to_jinja_syntax(obj)).render(ctx)
+            case _:
+                return obj
 
-def install(args) -> None:
     with open(MASON_REGISTRY, "r") as f:
         packages = json.load(f)
 
-    pkg = next((p for p in packages if p["name"] == args.package), None)
+    pkg = next((p for p in packages if p["name"] == name), None)
     if not pkg:
-        raise Exception(f"package '{args.package}' not found")
+        raise Exception(f"Package '{name}' not found")
+
+    _, _, version, _ = parse_source_id(pkg["source"]["id"])
+
+    pkg = process(
+        pkg,
+        {
+            "version": version,
+            "source": {
+                "asset": next((a for a in pkg["source"].get("asset", []) if is_current_target(a.get("target"))), None),
+                "build": next((b for b in pkg["source"].get("build", []) if is_current_target(b.get("target"))), None),
+            },
+        },
+    )
+
+    return pkg
+
+
+def install(args) -> None:
+    pkg = get_pkg(args.package)
+    type, package, version, pargs = parse_source_id(pkg["source"]["id"])
 
     package_dir = MASON_PACKAGES_DIR / args.package
     package_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(package_dir)
     os.environ["PWD"] = os.getcwd()
 
-    source_id = pkg["source"]["id"]
-    source_id = source_id[4:].split("/", 1)
-    source_id = [source_id[0]] + source_id[1].split("@")
-    if "?" in source_id[2]:
-        source_id = [source_id[0]] + [source_id[1]] + source_id[2].split("?")
-        source_id = [source_id[0]] + [source_id[1]] + [source_id[2]] + [dict([source_id[3].split("=")])]
-
-    type, package, version, args = source_id + [None] * (4 - len(source_id))
-    package = unquote(package)
-
-    pkg = process_placeholders(
-        pkg,
-        {
-            "version": version,
-            "source": {
-                "asset": next(
-                    (asset for asset in pkg["source"].get("asset", []) if is_current_target(asset.get("target"))),
-                    None,
-                ),
-                "build": next(
-                    (build for build in pkg["source"].get("build", []) if is_current_target(build.get("target"))),
-                    None,
-                ),
-            },
-        },
-    )
-
     match type:
         case "npm":
             subprocess.run(["npm", "install", f"{package}@{version}"])
         case "pypi":
-            extra = f"[{args['extra']}]" if args is not None else ""
+            extra = f"[{pargs['extra']}]" if pargs is not None else ""
             subprocess.run(["python", "-m", "venv", "venv"])
             subprocess.run(["./venv/bin/pip", "install", f"{package}{extra}=={version}"])
         case "github":
             if "asset" in pkg["source"]:
-                file = next(
-                    (a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])),
-                    None,
-                )
-                if file is None:
+                asset = next((a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])), None)
+                if asset is None:
                     raise Exception("Could not find asset")
-                download_github_release(package, file, version)
-                extract_file(Path(file))
+                download_github_release(package, asset, version)
+                extract_file(Path(asset))
             else:
-                subprocess.run(
-                    ["git", "clone", "--depth=1", f"https://github.com/{package}.git", "--branch", version, "."]
-                )
-
+                if os.path.exists(package_dir / ".git"):
+                    subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", version], check=True)
+                    subprocess.run(["git", "reset", "--hard", version], check=True)
+                else:
+                    subprocess.run(
+                        ["git", "clone", "--depth=1", f"https://github.com/{package}.git", "--branch", version, "."],
+                        check=True,
+                    )
         case _:
             raise Exception(f"'{type}' not implemented")
 
     if "build" in pkg["source"]:
         print("Building...")
-        build = next(
-            (a["run"] for a in pkg["source"]["build"] if is_current_target(a["target"])),
-            None,
-        )
+        build = next((a["run"] for a in pkg["source"]["build"] if is_current_target(a["target"])), None)
         if build is None:
             raise Exception("Could not find build")
-
         for cmd in build.splitlines():
             print(f"Running {cmd}")
             if cmd.strip():
                 subprocess.run(shlex.split(os.path.expandvars(cmd)), check=True)
 
     for key, value in pkg.get("bin", {}).items():
-        dist = MASON_BIN_DIR / key
         bin_path = Path()
         if ":" in value:
             type, bin = value.split(":")
@@ -261,6 +265,7 @@ def install(args) -> None:
                     raise Exception(f"'{type}' not implemented")
         else:
             bin_path = package_dir / value
+        dist = MASON_BIN_DIR / key
         if os.path.lexists(dist) and os.path.islink(dist):
             os.remove(dist)
         os.symlink(bin_path.absolute(), dist)
