@@ -32,31 +32,36 @@ MASON_PACKAGES_DIR = MASON_DATA_DIR / "packages"
 MASON_REGISTRY = MASON_CACHE_DIR / "registry.json"
 
 
-def extract_file(file_path: Path, extract_path=Path(".")) -> Path:
-    print(f"Extracting {file_path}...")
-    extracted_item = None
-    match file_path.suffixes[-2:]:
-        case [".tar", ".gz"] | [".tgz"]:
-            with tarfile.open(file_path, "r:gz") as tar:
-                tar.extractall(path=extract_path, filter="data")
-                extracted_item = extract_path / tar.getnames()[0]
-        case [".tar"]:
-            with tarfile.open(file_path, "r:") as tar:
-                tar.extractall(path=extract_path, filter="data")
-                extracted_item = extract_path / tar.getnames()[0]
-        case [".gz"]:
-            output_file = extract_path / file_path.stem
-            with gzip.open(file_path, "rb") as f_in, open(output_file, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
-            extracted_item = output_file
-        case [".zip"]:
-            with zipfile.ZipFile(file_path, "r") as zip_ref:
-                zip_ref.extractall(extract_path)
-                extracted_item = extract_path / zip_ref.namelist()[0]
-        case _:
-            raise Exception(f"Unsupported file type: {file_path}")
-    extracted_path = extract_path / extracted_item if extracted_item else extract_path
-    return extracted_path.resolve()
+def extract_file(file_path: Path, extract_path=Path(".")) -> None:
+    print(f"Extracting '{file_path}'...")
+    if file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix == ".tgz":
+        with tarfile.open(file_path, "r:gz") as tar:
+            tar.extractall(path=extract_path, filter="data")
+    elif file_path.suffix == ".tar":
+        with tarfile.open(file_path, "r:") as tar:
+            tar.extractall(path=extract_path, filter="data")
+    elif file_path.suffix == ".gz":
+        output_file = extract_path / file_path.stem
+        with gzip.open(file_path, "rb") as f_in, open(output_file, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    elif file_path.suffix == ".zip":
+        with zipfile.ZipFile(file_path, "r") as zip_ref:
+            zip_ref.extractall(extract_path)
+    else:
+        raise Exception(f"Unsupported file type: {file_path}")
+
+
+def extractable(file_path: Path) -> bool:
+    if file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix == ".tgz":
+        return True
+    elif file_path.suffix == ".tar":
+        return True
+    elif file_path.suffix == ".gz":
+        return True
+    elif file_path.suffix == ".zip":
+        return True
+    else:
+        return False
 
 
 def verify_checksums(checksum_file: Path) -> bool:
@@ -79,22 +84,16 @@ def download_github_release(repo: str, asset: str, version="latest", directory=P
     response = requests.get(f"https://api.github.com/repos/{repo}/releases/{version}")
     release_data = response.json()
 
-    download_link = next(
-        (asset_info["browser_download_url"] for asset_info in release_data["assets"] if asset_info["name"] == asset),
-        None,
-    )
+    download_link = next((a["browser_download_url"] for a in release_data["assets"] if a["name"] == asset), None)
     if not download_link:
         raise ValueError(f"Asset {asset} not found in release {version}")
 
-    print(f"Downloading {asset}...")
-    response = requests.get(
-        download_link,
-        stream=True,
-    )
+    print(f"Downloading '{download_link}'...")
+    response = requests.get(download_link, stream=True)
 
-    with open(Path(directory) / asset, "wb") as file:
+    with (directory / asset).open("wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
-            file.write(chunk)
+            f.write(chunk)
 
 
 def download_registry() -> None:
@@ -108,8 +107,7 @@ def download_registry() -> None:
         else:
             print("Updating registry...")
         download_github_release(MASON_REPO, "registry.json.zip", "latest", MASON_CACHE_DIR)
-        with zipfile.ZipFile(MASON_CACHE_DIR / "registry.json.zip", "r") as z:
-            z.extractall(MASON_CACHE_DIR)
+        extract_file(MASON_CACHE_DIR / "registry.json.zip")
     else:
         print("Registry up-to-date")
 
@@ -274,7 +272,7 @@ def install(args) -> None:
         if build is None:
             raise Exception("Could not find build")
         for cmd in build.splitlines():
-            print(f"Running {cmd}")
+            print(f"Running '{cmd}'")
             if cmd.strip():
                 subprocess.run(shlex.split(os.path.expandvars(cmd)), check=True)
 
@@ -292,8 +290,8 @@ def install(args) -> None:
         else:
             bin_path = package_dir / value
         dist = MASON_BIN_DIR / key
-        if os.path.lexists(dist) and os.path.islink(dist):
-            os.remove(dist)
+        if dist.exists() or dist.is_symlink():
+            dist.unlink()
         os.symlink(bin_path.absolute(), dist)
 
 
