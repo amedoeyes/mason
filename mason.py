@@ -1,5 +1,6 @@
 #!/bin/python3
 
+import textwrap
 import argparse
 import gzip
 import hashlib
@@ -209,6 +210,26 @@ def get_pkg(name: str) -> Any:
     return pkg
 
 
+def write_exec_script(path: Path, command: str, env: dict[str, str | int] = {}):
+    bash_template = textwrap.dedent("""\
+        #!/usr/bin/env bash
+        {}
+        exec {} "$@"
+    """)
+    batch_template = textwrap.dedent("""\
+        @ECHO off
+        {}
+        {} %*
+    """)
+    if platform.system() == "Windows":
+        with path.open("w") as f:
+            f.write(batch_template.format("\n".join([f"SET {k}={v}" for k, v in env.items()]), command))
+    else:
+        with path.open("w") as f:
+            f.write(bash_template.format("\n".join([f"export {k}={v}" for k, v in env.items()]), command))
+        path.chmod(path.stat().st_mode | 0o111)
+
+
 def install(args) -> None:
     pkg = get_pkg(args.package)
     type, package, version, pargs = parse_source_id(pkg["source"]["id"])
@@ -286,6 +307,9 @@ def install(args) -> None:
                     bin_path = package_dir / f"./node_modules/.bin/{bin}"
                 case "pypi":
                     bin_path = package_dir / f"./venv/bin/{bin}"
+                case "exec":
+                    bin_path = package_dir / key
+                    write_exec_script(bin_path, str(Path(bin).absolute()))
                 case _:
                     raise Exception(f"'{type}' not implemented")
         else:
