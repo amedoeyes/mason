@@ -192,8 +192,8 @@ def get_pkg(name: str) -> Any:
     pkg = next((p for p in packages if p["name"] == name), None)
     if not pkg:
         raise Exception(f"Package '{name}' not found")
-
-    _, _, version, _ = parse_source_id(pkg["source"]["id"])
+    if "deprecation" in pkg:
+        raise Exception(f"Package '{name}' is deprecated: {pkg['deprecation']['message']}")
 
     pkg = process(
         pkg,
@@ -368,6 +368,8 @@ def search(args) -> None:
         if (name or desc) and cat and lang:
             _, _, version, _ = parse_source_id(pkg["source"]["id"])
             print(f"{pkg['name']} {version}")
+            if "deprecation" in pkg:
+                print(f"    Deprecation: {pkg['deprecation']['message']}")
             print(f"    Description: {pkg['description'].rstrip('\n').replace('\n', ' ')}")
             print(f"    Homepage: {pkg['homepage']}")
             print(f"    Categories: {', '.join(pkg['categories'])}")
