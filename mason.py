@@ -347,14 +347,20 @@ def install(args) -> None:
         os.symlink(bin_path.absolute(), dist)
 
     for key, value in pkg.get("share", {}).items():
-        dist_dir = MASON_SHARE_DIR / key
+        dist = MASON_SHARE_DIR / key
         share_path = package_dir / value
-        dist_dir.mkdir(parents=True, exist_ok=True)
-        for file in share_path.iterdir():
-            dist = dist_dir / file.name
+        if key.endswith("/"):
+            dist.mkdir(parents=True, exist_ok=True)
+            for file in share_path.iterdir():
+                dist = dist / file.name
+                if dist.is_symlink():
+                    dist.unlink()
+                dist.symlink_to(file)
+        else:
+            dist.parent.mkdir(parents=True, exist_ok=True)
             if dist.is_symlink():
                 dist.unlink()
-            dist.symlink_to(file)
+            dist.symlink_to(share_path)
 
 
 def search(args) -> None:
