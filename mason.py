@@ -1,5 +1,3 @@
-#!/bin/python3
-
 import argparse
 import gzip
 import hashlib
@@ -15,7 +13,7 @@ import tarfile
 import textwrap
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import unquote
 
 import requests
@@ -102,7 +100,7 @@ def download_registry() -> None:
     extract_file(MASON_CACHE_DIR / "registry.json.zip", MASON_CACHE_DIR)
 
 
-def is_current_target(target: str | list[str]) -> bool:
+def is_platform(target: str | list[str]) -> bool:
     system = platform.system().lower()
     arch = platform.machine().lower()
     arch_map = {
@@ -129,6 +127,8 @@ def is_current_target(target: str | list[str]) -> bool:
         f"{system_map[system]}_{arch_map[arch]}",
         "win" if system == "windows" else "unix",
     ]
+    if system == "linux":
+        possible_targets.append("linux")
     if libc:
         possible_targets.append(f"{system_map[system]}_{arch_map[arch]}_{libc}")
     return any(t in possible_targets for t in (target if isinstance(target, list) else [target]))
@@ -142,49 +142,94 @@ def parse_source_id(source_id: str) -> tuple[str, str, str, dict[str, str] | Non
     return (manager, unquote(package), unquote(version), params)
 
 
-def get_pkg(name: str) -> Any:
-    env = Environment()
-    env.filters["take_if_not"] = lambda value, cond: value if not cond else None
-    env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
-    env.globals["is_platform"] = is_current_target
+def to_jinja_syntax(s):
+    s = re.sub(r"\|\|", "|", s)
+    s = re.sub(r'strip_prefix\s*\\?"(.*?)\\?"', r'strip_prefix("\1")', s)
+    return s
 
-    def to_jinja_syntax(s):
-        s = re.sub(r"\|\|", "|", s)
-        s = re.sub(r'strip_prefix\s*\\?"(.*?)\\?"', r'strip_prefix("\1")', s)
-        return s
 
-    def process(obj, ctx):
-        match obj:
-            case dict():
-                return {k: process(v, ctx) for k, v in obj.items()}
-            case list():
-                return [process(v, ctx) for v in obj]
-            case str():
-                return env.from_string(to_jinja_syntax(obj)).render(ctx)
-            case _:
-                return obj
+class Asset:
+    files: list[str]
+    bin: Optional[str | dict[str, str]]
 
-    packages = json.loads(MASON_REGISTRY.read_bytes())
-    pkg = next((p for p in packages if p["name"] == name), None)
-    if not pkg:
-        raise Exception(f"Package '{name}' not found")
-    if "deprecation" in pkg:
-        raise Exception(f"Package '{name}' is deprecated: {pkg['deprecation']['message']}")
-    version = parse_source_id(pkg["source"]["id"])[2]
-    return process(
-        pkg,
-        {
-            "take_if_not": lambda value: value,
-            "version": version,
-            "source": {
-                "asset": process(
-                    next((a for a in pkg["source"].get("asset", []) if is_current_target(a.get("target"))), None),
-                    {"version": version},
-                ),
-                "build": next((b for b in pkg["source"].get("build", []) if is_current_target(b.get("target"))), None),
-            },
-        },
-    )
+    def __init__(self, data: Any) -> None:
+        self.files = [data["file"]] if isinstance(data["file"], str) else data["file"]
+        self.bin = data.get("bin", None)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"
+
+
+class Build:
+    cmds: list[list[str]]
+    env: dict[str, str]
+
+    def __init__(self, data: Any) -> None:
+        self.cmds = [shlex.split(os.path.expandvars(cmd)) for cmd in data["run"].splitlines()]
+        self.env = data.get("env", {})
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"
+
+
+class Package:
+    name: str
+    description: str
+    homepage: str
+    licenses: list[str]
+    languages: Optional[list[str]]
+    categories: list[str]
+    deprecation: Optional[str]
+    package: str
+    version: str
+    manager: str
+    params: dict[str, str]
+    asset: Optional[Asset]
+    build: Optional[Build]
+    bin: Optional[dict[str, str]]
+    share: Optional[dict[str, str]]
+
+    def __init__(self, data: Any) -> None:
+        self.name = data["name"]
+        self.homepage = data["homepage"]
+        self.licenses = data["licenses"]
+        self.languages = data["languages"]
+        self.categories = data["categories"]
+        self.description = data["description"].replace("\n", " ").strip()
+        self.deprecation = data["deprecation"]["message"] if "deprecation" in data else None
+        self.manager, rest = data["source"]["id"][4:].split("/", 1)
+        self.package, rest = rest.split("@", 1)
+        self.version, rest = (rest.split("?", 1) + [""])[:2]
+        self.params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]} if rest else {}
+
+        env = Environment()
+        env.filters["take_if_not"] = lambda value, cond: value if not cond else None
+        env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
+        env.globals["is_platform"] = is_platform
+        env.globals["version"] = self.version
+
+        assets = data["source"].get("asset", None)
+        if isinstance(assets, list):
+            data["source"]["asset"] = next((a for a in assets if is_platform(a.get("target"))), None)
+
+        builds = data["source"].get("build", None)
+        if isinstance(builds, list):
+            data["source"]["build"] = next((a for a in builds if is_platform(a.get("target"))), None)
+
+        env.globals.update(data)
+
+        data_str = json.dumps(data, indent=2)
+        data_str = env.from_string(to_jinja_syntax(data_str)).render()
+        data_str = env.from_string(to_jinja_syntax(data_str)).render()  # have to do 2 passes because nesting :/
+        data = json.loads(data_str)
+
+        self.asset = Asset(asset) if (asset := data["source"].get("asset")) else None
+        self.build = Build(build) if (build := data["source"].get("build")) else None
+        self.bin = data.get("bin", None)
+        self.share = data.get("share", None)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"
 
 
 def write_exec_script(path: Path, command: str, env: dict[str, str | int] | None = None):
@@ -211,82 +256,86 @@ def write_exec_script(path: Path, command: str, env: dict[str, str | int] | None
 
 
 def install(args) -> None:
-    pkg = get_pkg(args.package)
-    manager, package, version, params = parse_source_id(pkg["source"]["id"])
+    packages = json.loads(MASON_REGISTRY.read_bytes())
+    pkg = next((p for p in packages if p["name"] == args.package), None)
+    if not pkg:
+        raise Exception(f"Package '{args.package}' not found")
 
-    package_dir = MASON_PACKAGES_DIR / args.package
+    pkg = Package(pkg)
+    if pkg.deprecation:
+        raise Exception(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
+
+    package_dir = MASON_PACKAGES_DIR / pkg.name
     package_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(package_dir)
     os.environ["PWD"] = os.getcwd()
 
-    match manager:
+    match pkg.manager:
         case "npm":
-            subprocess.run(["npm", "install", f"{package}@{version}"])
+            subprocess.run(["npm", "install", f"{pkg.package}@{pkg.version}"])
         case "pypi":
-            extra = f"[{params['extra']}]" if params else ""
+            extra = f"[{pkg.params['extra']}]" if "extra" in pkg.params else ""
             subprocess.run(["python", "-m", "venv", "venv"])
-            subprocess.run(["./venv/bin/pip", "install", f"{package}{extra}=={version}"])
+            subprocess.run(["./venv/bin/pip", "install", f"{pkg.package}{extra}=={pkg.version}"])
         case "github":
-
-            def process_asset(asset: str) -> None:
-                asset_path = Path(asset)
-                dist_path = Path(".")
-                match asset.split(":", 1):
-                    case [ref, dist] if dist.endswith("/"):
-                        dist_path = Path(dist)
-                        dist_path.mkdir(parents=True, exist_ok=True)
-                        download_github_release(package, ref, version, dist_path)
-                        asset_path = dist_path / ref
-                    case [ref, dist]:
-                        download_github_release(package, ref, version)
-                        asset_path = Path(ref).replace(dist)
-                    case _:
-                        download_github_release(package, asset, version)
-                if is_extractable(asset_path):
-                    extract_file(asset_path, dist_path)
-
-            if "asset" in pkg["source"]:
-                asset = next((a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])), None)
-                if not asset:
-                    raise Exception("Could not find asset")
-                for a in [asset] if isinstance(asset, str) else asset:
-                    process_asset(a)
+            if pkg.asset:
+                for f in pkg.asset.files:
+                    asset_path = Path(f)
+                    dist_path = Path(".")
+                    match f.split(":", 1):
+                        case [ref, dist] if dist.endswith("/"):
+                            dist_path = Path(dist)
+                            dist_path.mkdir(parents=True, exist_ok=True)
+                            download_github_release(pkg.package, ref, pkg.version, dist_path)
+                            asset_path = dist_path / ref
+                        case [ref, dist]:
+                            download_github_release(pkg.package, ref, pkg.version)
+                            asset_path = Path(ref).replace(dist)
+                        case _:
+                            download_github_release(pkg.package, f, pkg.version)
+                    if is_extractable(asset_path):
+                        extract_file(asset_path, dist_path)
             else:
                 if (package_dir / ".git").exists():
-                    subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", version], check=True)
-                    subprocess.run(["git", "reset", "--hard", version], check=True)
+                    subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", pkg.version], check=True)
+                    subprocess.run(["git", "reset", "--hard", pkg.version], check=True)
                 else:
                     subprocess.run(
-                        ["git", "clone", "--depth=1", f"https://github.com/{package}.git", "--branch", version, "."],
+                        [
+                            "git",
+                            "clone",
+                            "--depth=1",
+                            f"https://github.com/{pkg.package}.git",
+                            "--branch",
+                            pkg.version,
+                            ".",
+                        ],
                         check=True,
                     )
         case "cargo":
             cmd = ["cargo", "install", "--root", "."]
-            if params:
-                if repo_url := params.get("repository_url"):
+            if pkg.params:
+                if repo_url := pkg.params.get("repository_url"):
                     cmd += ["--git", repo_url]
-                    cmd += ["--rev" if params.get("rev") == "true" else "--tag", version]
+                    cmd += ["--rev" if pkg.params.get("rev") == "true" else "--tag", pkg.version]
                 else:
-                    cmd += ["--version", version]
-                if features := params.get("features"):
+                    cmd += ["--version", pkg.version]
+                if features := pkg.params.get("features"):
                     cmd += ["--features", features]
-                if params.get("locked") == "true":
+                if pkg.params.get("locked") == "true":
                     cmd.append("--locked")
-            cmd.append(package)
+            cmd.append(pkg.package)
             subprocess.run(cmd)
         case _:
-            raise Exception(f"'{manager}' not implemented")
+            raise Exception(f"'{pkg.manager}' not implemented")
 
-    if "build" in pkg["source"]:
+    if pkg.build:
         print("Building...")
-        build = next((a["run"] for a in pkg["source"]["build"] if is_current_target(a["target"])), None)
-        if build is None:
-            raise Exception("Could not find build")
-        for cmd in build.splitlines():
-            print(f"Running '{cmd}'")
-            subprocess.run(shlex.split(os.path.expandvars(cmd)), check=True)
+        for cmd in pkg.build.cmds:
+            print(f"Running {' '.join(cmd)}")
+            subprocess.run(cmd, check=True, env=pkg.build.env)
 
-    for key, value in pkg.get("bin", {}).items():
+    for key, value in (pkg.bin or {}).items():
         bin_path = Path()
         if ":" in value:
             manager, bin = value.split(":")
@@ -320,7 +369,7 @@ def install(args) -> None:
             dist.unlink()
         os.symlink(bin_path.absolute(), dist)
 
-    for key, value in pkg.get("share", {}).items():
+    for key, value in (pkg.share or {}).items():
         dist = MASON_SHARE_DIR / key
         share_path = package_dir / value
         if key.endswith("/"):
@@ -347,16 +396,16 @@ def search(args) -> None:
             and (args.query in pkg["name"] or args.query in pkg["description"])
         )
 
-    for pkg in filter(matches, packages):
-        print(f"{pkg['name']} {parse_source_id(pkg['source']['id'])[2]}")
-        if "deprecation" in pkg:
-            print(f"    Deprecation: {pkg['deprecation']['message']}")
-        print(f"    Description: {pkg['description'].replace('\n', ' ').strip()}")
-        print(f"    Homepage: {pkg['homepage']}")
-        print(f"    Categories: {', '.join(pkg['categories'])}")
-        if pkg["languages"]:
-            print(f"    Languages: {', '.join(pkg['languages'])}")
-        print(f"    Licenses: {', '.join(pkg['licenses'])}")
+    for pkg in map(lambda pkg: Package(pkg), filter(matches, packages)):
+        print(f"{pkg.name} {pkg.version}")
+        if pkg.deprecation:
+            print(f"    Deprecation: {pkg.deprecation}")
+        print(f"    Description: {pkg.description}")
+        print(f"    Homepage: {pkg.homepage}")
+        print(f"    Categories: {', '.join(pkg.categories)}")
+        if pkg.languages:
+            print(f"    Languages: {', '.join(pkg.languages)}")
+        print(f"    Licenses: {', '.join(pkg.licenses)}")
         print()
 
 
