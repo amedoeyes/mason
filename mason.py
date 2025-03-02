@@ -165,8 +165,7 @@ def parse_source_id(source_id: str) -> tuple[str, str, str, dict | None]:
     args = None
     if "?" in rest:
         version, rest = rest.split("?", 1)
-        key, value = rest.split("=", 1)
-        args = {key: value}
+        args = {k: v for arg in rest.split("&") for k, v in [arg.split("=", 1)]}
     else:
         version = rest
     return (type, unquote(package), unquote(version), args)
