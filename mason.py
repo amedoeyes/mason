@@ -287,6 +287,20 @@ def install(args) -> None:
                         ["git", "clone", "--depth=1", f"https://github.com/{package}.git", "--branch", version, "."],
                         check=True,
                     )
+        case "cargo":
+            cmd = ["cargo", "install", "--root", "."]
+            if pargs:
+                if repo_url := pargs.get("repository_url"):
+                    cmd += ["--git", repo_url]
+                    cmd += ["--rev" if pargs.get("rev") == "true" else "--tag", version]
+                else:
+                    cmd += ["--version", version]
+                if features := pargs.get("features"):
+                    cmd += ["--features", features]
+                if pargs.get("locked") == "true":
+                    cmd.append("--locked")
+            cmd.append(package)
+            subprocess.run(cmd)
         case _:
             raise Exception(f"'{type}' not implemented")
 
@@ -318,6 +332,11 @@ def install(args) -> None:
                 case "pyvenv":
                     bin_path = package_dir / key
                     write_exec_script(bin_path, f"{package_dir / 'venv/bin/python'} -m {bin}")
+                case "cargo":
+                    if platform.system() == "Windows":
+                        bin_path = package_dir / f"bin/{bin}.exe"
+                    else:
+                        bin_path = package_dir / f"bin/{bin}"
                 case _:
                     raise Exception(f"'{type}' not implemented")
         else:
