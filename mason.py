@@ -1,6 +1,5 @@
 #!/bin/python3
 
-import textwrap
 import argparse
 import gzip
 import hashlib
@@ -13,13 +12,15 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import textwrap
 import zipfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
 import requests
-from jinja2 import Template
+from jinja2 import Environment
+from tqdm import tqdm
 
 MASON_REPO = os.getenv("MASON_REPO", "mason-org/mason-registry")
 MASON_CACHE_DIR = Path(
@@ -34,68 +35,58 @@ MASON_PACKAGES_DIR = MASON_DATA_DIR / "packages"
 MASON_REGISTRY = MASON_CACHE_DIR / "registry.json"
 
 
-def extract_file(file_path: Path, extract_path=Path(".")) -> None:
+def extract_file(file_path: Path, out_path=Path(".")) -> None:
     print(f"Extracting '{file_path}'...")
-    if file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix == ".tgz":
-        with tarfile.open(file_path, "r:gz") as tar:
-            tar.extractall(path=extract_path, filter="data")
-    elif file_path.suffix == ".tar":
-        with tarfile.open(file_path, "r:") as tar:
-            tar.extractall(path=extract_path, filter="data")
-    elif file_path.suffix == ".gz":
-        output_file = extract_path / file_path.stem
-        with gzip.open(file_path, "rb") as f_in, open(output_file, "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
-    elif file_path.suffix == ".zip":
-        with zipfile.ZipFile(file_path, "r") as zip_ref:
-            zip_ref.extractall(extract_path)
-    else:
-        raise Exception(f"Unsupported file type: {file_path}")
+    match file_path.suffixes[-2:]:
+        case [".tar", ".gz"] | [_, ".tgz"] | [".tgz"]:
+            with tarfile.open(file_path, "r:gz") as tar:
+                tar.extractall(path=out_path, filter="data")
+        case [_, ".tar"] | [".tar"]:
+            with tarfile.open(file_path, "r:") as tar:
+                tar.extractall(path=out_path, filter="data")
+        case [_, ".gz"] | [".gz"]:
+            with gzip.open(file_path, "rb") as f_in, (out_path / file_path.stem).open("wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        case [_, ".zip"] | [".zip"]:
+            with zipfile.ZipFile(file_path, "r") as zip_ref:
+                zip_ref.extractall(out_path)
+        case _:
+            raise ValueError(f"Unsupported file type: {file_path}")
 
 
-def extractable(file_path: Path) -> bool:
-    if file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix == ".tgz":
-        return True
-    elif file_path.suffix == ".tar":
-        return True
-    elif file_path.suffix == ".gz":
-        return True
-    elif file_path.suffix == ".zip":
-        return True
-    else:
-        return False
+def is_extractable(file_path: Path) -> bool:
+    return file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix in {".tgz", ".tar", ".gz", ".zip"}
 
 
 def verify_checksums(checksum_file: Path) -> bool:
-    with open(checksum_file, "r") as f:
-        try:
-            for line in f:
-                expected_hash, file = line.split()
-                with open(checksum_file.parent / file, "rb") as f:
-                    if hashlib.file_digest(f, "sha256").hexdigest() != expected_hash:
-                        return False
-        except FileNotFoundError:
+    for line in checksum_file.read_text():
+        expected_hash, file = line.split()
+        file_path = checksum_file.parent / file
+        if not file_path.exists() or hashlib.sha256(file_path.read_bytes()).hexdigest() != expected_hash:
             return False
     return True
 
 
-def download_github_release(repo: str, asset: str, version="latest", directory=Path(".")) -> None:
+def download_file(url: str, out_path: Path) -> None:
+    print(f"Downloading '{url}'...")
+    with requests.get(url, stream=True) as response:
+        response.raise_for_status()
+        total_size = int(response.headers.get("content-length", 0))
+        with out_path.open("wb") as f, tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024) as progress:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                progress.update(len(chunk))
+
+
+def download_github_release(repo: str, asset: str, version="latest", out_path=Path(".")) -> None:
     if version != "latest":
         version = f"tags/{version}"
-
     response = requests.get(f"https://api.github.com/repos/{repo}/releases/{version}")
-    release_data = response.json()
-
-    download_link = next((a["browser_download_url"] for a in release_data["assets"] if a["name"] == asset), None)
+    response.raise_for_status()
+    download_link = next((a["browser_download_url"] for a in response.json()["assets"] if a["name"] == asset), None)
     if not download_link:
-        raise ValueError(f"Asset {asset} not found in release {version}")
-
-    print(f"Downloading '{download_link}'...")
-    response = requests.get(download_link, stream=True)
-
-    with (directory / asset).open("wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+        raise ValueError(f"Asset '{asset}' not found in release '{version}'")
+    download_file(download_link, out_path / asset)
 
 
 def download_registry() -> None:
@@ -103,21 +94,17 @@ def download_registry() -> None:
     if checksums_file.exists():
         print("Checking for update...")
     download_github_release(MASON_REPO, "checksums.txt", "latest", MASON_CACHE_DIR)
-    if not verify_checksums(checksums_file):
-        if not MASON_REGISTRY.exists():
-            print("Downloading registry...")
-        else:
-            print("Updating registry...")
-        download_github_release(MASON_REPO, "registry.json.zip", "latest", MASON_CACHE_DIR)
-        extract_file(MASON_CACHE_DIR / "registry.json.zip", MASON_CACHE_DIR)
-    else:
+    if verify_checksums(checksums_file):
         print("Registry up-to-date")
+        return
+    print("Downloading registry..." if not MASON_REGISTRY.exists() else "Updating registry...")
+    download_github_release(MASON_REPO, "registry.json.zip", "latest", MASON_CACHE_DIR)
+    extract_file(MASON_CACHE_DIR / "registry.json.zip", MASON_CACHE_DIR)
 
 
 def is_current_target(target: str | list[str]) -> bool:
     system = platform.system().lower()
     arch = platform.machine().lower()
-
     arch_map = {
         "x86_64": "x64",
         "amd64": "x64",
@@ -128,52 +115,43 @@ def is_current_target(target: str | list[str]) -> bool:
         "armv6l": "armv6l",
         "armv7l": "armv7l",
     }
-
     system_map = {
         "linux": "linux",
         "darwin": "darwin",
         "windows": "win",
     }
-
-    result = subprocess.run(["ldd", "--version"], capture_output=True)
-    first_line = str(result.stdout.splitlines()[0])
-    libc = ""
-    if "musl" in first_line:
-        libc = "musl"
-    elif "glibc" in first_line or "GNU" in first_line:
-        libc = "gnu"
-
-    possible_targets = {system, f"{system_map[system]}_{arch_map[arch]}"}
-    possible_targets.add(f"{system_map[system]}_{arch_map[arch]}_{libc}")
-
-    if system in {"linux", "darwin"}:
-        possible_targets.add("unix")
-    elif system == "windows":
-        possible_targets.add("win")
-
-    match target:
-        case str():
-            return target in possible_targets
-        case list():
-            return any(t in possible_targets for t in target)
+    libc = None
+    if system == "linux":
+        result = subprocess.run(["ldd", "--version"], capture_output=True, text=True)
+        first_line = result.stdout.splitlines()[0] if result.stdout else ""
+        libc = "musl" if "musl" in first_line else "gnu" if any(s in first_line for s in {"glibc", "GNU"}) else None
+    possible_targets = [
+        f"{system_map[system]}_{arch_map[arch]}",
+        "win" if system == "windows" else "unix",
+    ]
+    if libc:
+        possible_targets.append(f"{system_map[system]}_{arch_map[arch]}_{libc}")
+    return any(t in possible_targets for t in (target if isinstance(target, list) else [target]))
 
 
-def parse_source_id(source_id: str) -> tuple[str, str, str, dict | None]:
-    type, rest = source_id[4:].split("/", 1)
+def parse_source_id(source_id: str) -> tuple[str, str, str, dict[str, str] | None]:
+    manager, rest = source_id[4:].split("/", 1)
     package, rest = rest.split("@", 1)
-    version = ""
-    args = None
-    if "?" in rest:
-        version, rest = rest.split("?", 1)
-        args = {k: v for arg in rest.split("&") for k, v in [arg.split("=", 1)]}
-    else:
-        version = rest
-    return (type, unquote(package), unquote(version), args)
+    version, rest = (rest.split("?", 1) + [""])[:2]
+    params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]} if rest else None
+    return (manager, unquote(package), unquote(version), params)
 
 
 def get_pkg(name: str) -> Any:
+    env = Environment()
+    env.filters["take_if_not"] = lambda value, cond: value if not cond else None
+    env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
+    env.globals["is_platform"] = is_current_target
+
     def to_jinja_syntax(s):
-        return re.sub(r"\|\|?\s*strip_prefix\s*\\?\"(.*?)\\?\"", r"| replace('\1', '')", s)
+        s = re.sub(r"\|\|", "|", s)
+        s = re.sub(r'strip_prefix\s*\\?"(.*?)\\?"', r'strip_prefix("\1")', s)
+        return s
 
     def process(obj, ctx):
         match obj:
@@ -182,22 +160,21 @@ def get_pkg(name: str) -> Any:
             case list():
                 return [process(v, ctx) for v in obj]
             case str():
-                return Template(to_jinja_syntax(obj)).render(ctx)
+                return env.from_string(to_jinja_syntax(obj)).render(ctx)
             case _:
                 return obj
 
-    with open(MASON_REGISTRY, "r") as f:
-        packages = json.load(f)
-
+    packages = json.loads(MASON_REGISTRY.read_bytes())
     pkg = next((p for p in packages if p["name"] == name), None)
     if not pkg:
         raise Exception(f"Package '{name}' not found")
     if "deprecation" in pkg:
         raise Exception(f"Package '{name}' is deprecated: {pkg['deprecation']['message']}")
-
-    pkg = process(
+    version = parse_source_id(pkg["source"]["id"])[2]
+    return process(
         pkg,
         {
+            "take_if_not": lambda value: value,
             "version": version,
             "source": {
                 "asset": process(
@@ -209,10 +186,9 @@ def get_pkg(name: str) -> Any:
         },
     )
 
-    return pkg
 
-
-def write_exec_script(path: Path, command: str, env: dict[str, str | int] = {}):
+def write_exec_script(path: Path, command: str, env: dict[str, str | int] | None = None):
+    env = env or {}
     bash_template = textwrap.dedent("""\
         #!/usr/bin/env bash
         {}
@@ -223,60 +199,57 @@ def write_exec_script(path: Path, command: str, env: dict[str, str | int] = {}):
         {}
         {} %*
     """)
-    if platform.system() == "Windows":
-        with path.open("w") as f:
-            f.write(batch_template.format("\n".join([f"SET {k}={v}" for k, v in env.items()]), command))
-    else:
-        with path.open("w") as f:
-            f.write(bash_template.format("\n".join([f"export {k}={v}" for k, v in env.items()]), command))
+    path.write_text(
+        (batch_template if platform.system() == "Windows" else bash_template).format(
+            "\n".join([f"{'SET' if platform.system() == 'Windows' else 'export'} {k}={v}" for k, v in env.items()]),
+            command,
+        ),
+        encoding="utf-8",
+    )
+    if platform.system() != "Windows":
         path.chmod(path.stat().st_mode | 0o111)
 
 
 def install(args) -> None:
     pkg = get_pkg(args.package)
-    type, package, version, pargs = parse_source_id(pkg["source"]["id"])
+    manager, package, version, params = parse_source_id(pkg["source"]["id"])
 
     package_dir = MASON_PACKAGES_DIR / args.package
     package_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(package_dir)
     os.environ["PWD"] = os.getcwd()
 
-    match type:
+    match manager:
         case "npm":
             subprocess.run(["npm", "install", f"{package}@{version}"])
         case "pypi":
-            extra = f"[{pargs['extra']}]" if pargs is not None else ""
+            extra = f"[{params['extra']}]" if params else ""
             subprocess.run(["python", "-m", "venv", "venv"])
             subprocess.run(["./venv/bin/pip", "install", f"{package}{extra}=={version}"])
         case "github":
 
             def process_asset(asset: str) -> None:
-                if ":" in asset:
-                    ref, dist = asset.split(":", 1)
-                    if dist[-1] == "/":
-                        dist = Path(dist)
-                        dist.mkdir(parents=True, exist_ok=True)
-                        download_github_release(package, ref, version, dist)
-                        asset_path = dist / ref
-                        if extractable(asset_path):
-                            extract_file(asset_path, dist)
-                    else:
+                asset_path = Path(asset)
+                dist_path = Path(".")
+                match asset.split(":", 1):
+                    case [ref, dist] if dist.endswith("/"):
+                        dist_path = Path(dist)
+                        dist_path.mkdir(parents=True, exist_ok=True)
+                        download_github_release(package, ref, version, dist_path)
+                        asset_path = dist_path / ref
+                    case [ref, dist]:
                         download_github_release(package, ref, version)
                         asset_path = Path(ref).replace(dist)
-                        if extractable(asset_path):
-                            extract_file(asset_path)
-                else:
-                    download_github_release(package, asset, version)
-                    asset_path = Path(asset)
-                    if extractable(asset_path):
-                        extract_file(asset_path)
+                    case _:
+                        download_github_release(package, asset, version)
+                if is_extractable(asset_path):
+                    extract_file(asset_path, dist_path)
 
             if "asset" in pkg["source"]:
                 asset = next((a["file"] for a in pkg["source"]["asset"] if is_current_target(a["target"])), None)
-                if asset is None:
+                if not asset:
                     raise Exception("Could not find asset")
-                assets = asset if isinstance(asset, list) else [asset]
-                for a in assets:
+                for a in [asset] if isinstance(asset, str) else asset:
                     process_asset(a)
             else:
                 if (package_dir / ".git").exists():
@@ -289,20 +262,20 @@ def install(args) -> None:
                     )
         case "cargo":
             cmd = ["cargo", "install", "--root", "."]
-            if pargs:
-                if repo_url := pargs.get("repository_url"):
+            if params:
+                if repo_url := params.get("repository_url"):
                     cmd += ["--git", repo_url]
-                    cmd += ["--rev" if pargs.get("rev") == "true" else "--tag", version]
+                    cmd += ["--rev" if params.get("rev") == "true" else "--tag", version]
                 else:
                     cmd += ["--version", version]
-                if features := pargs.get("features"):
+                if features := params.get("features"):
                     cmd += ["--features", features]
-                if pargs.get("locked") == "true":
+                if params.get("locked") == "true":
                     cmd.append("--locked")
             cmd.append(package)
             subprocess.run(cmd)
         case _:
-            raise Exception(f"'{type}' not implemented")
+            raise Exception(f"'{manager}' not implemented")
 
     if "build" in pkg["source"]:
         print("Building...")
@@ -311,14 +284,13 @@ def install(args) -> None:
             raise Exception("Could not find build")
         for cmd in build.splitlines():
             print(f"Running '{cmd}'")
-            if cmd.strip():
-                subprocess.run(shlex.split(os.path.expandvars(cmd)), check=True)
+            subprocess.run(shlex.split(os.path.expandvars(cmd)), check=True)
 
     for key, value in pkg.get("bin", {}).items():
         bin_path = Path()
         if ":" in value:
-            type, bin = value.split(":")
-            match type:
+            manager, bin = value.split(":")
+            match manager:
                 case "npm":
                     bin_path = package_dir / f"node_modules/.bin/{bin}"
                 case "pypi":
@@ -338,9 +310,11 @@ def install(args) -> None:
                     else:
                         bin_path = package_dir / f"bin/{bin}"
                 case _:
-                    raise Exception(f"'{type}' not implemented")
+                    raise Exception(f"'{manager}' not implemented")
         else:
             bin_path = package_dir / value
+        if platform.system() != "Windows":
+            bin_path.chmod(bin_path.stat().st_mode | 0o111)
         dist = MASON_BIN_DIR / key
         if dist.is_symlink():
             dist.unlink()
@@ -364,25 +338,26 @@ def install(args) -> None:
 
 
 def search(args) -> None:
-    with open(MASON_REGISTRY, "r") as f:
-        packages = json.load(f)
-    for pkg in packages:
-        cat = not args.category or any(args.category.lower() == cat.lower() for cat in pkg["categories"])
-        lang = not args.language or any(args.language.lower() == lang.lower() for lang in pkg["languages"])
-        name = args.query in pkg["name"]
-        desc = args.query in pkg["description"]
-        if (name or desc) and cat and lang:
-            _, _, version, _ = parse_source_id(pkg["source"]["id"])
-            print(f"{pkg['name']} {version}")
-            if "deprecation" in pkg:
-                print(f"    Deprecation: {pkg['deprecation']['message']}")
-            print(f"    Description: {pkg['description'].rstrip('\n').replace('\n', ' ')}")
-            print(f"    Homepage: {pkg['homepage']}")
-            print(f"    Categories: {', '.join(pkg['categories'])}")
-            if len(pkg["languages"]) > 0:
-                print(f"    Languages: {', '.join(pkg['languages'])}")
-            print(f"    Licenses: {', '.join(pkg['licenses'])}")
-            print()
+    packages = json.loads(MASON_REGISTRY.read_bytes())
+
+    def matches(pkg):
+        return (
+            (not args.category or any(args.category.casefold() == c.casefold() for c in pkg["categories"]))
+            and (not args.language or any(args.language.casefold() == l.casefold() for l in pkg["languages"]))
+            and (args.query in pkg["name"] or args.query in pkg["description"])
+        )
+
+    for pkg in filter(matches, packages):
+        print(f"{pkg['name']} {parse_source_id(pkg['source']['id'])[2]}")
+        if "deprecation" in pkg:
+            print(f"    Deprecation: {pkg['deprecation']['message']}")
+        print(f"    Description: {pkg['description'].replace('\n', ' ').strip()}")
+        print(f"    Homepage: {pkg['homepage']}")
+        print(f"    Categories: {', '.join(pkg['categories'])}")
+        if pkg["languages"]:
+            print(f"    Languages: {', '.join(pkg['languages'])}")
+        print(f"    Licenses: {', '.join(pkg['licenses'])}")
+        print()
 
 
 if __name__ == "__main__":
