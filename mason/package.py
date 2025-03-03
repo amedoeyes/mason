@@ -142,4 +142,3 @@ class Package:
 
         self.bin = data.get("bin")
         self.share = data.get("share")
-        print(self)

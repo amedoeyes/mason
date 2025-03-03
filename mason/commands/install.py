@@ -62,6 +62,7 @@ def _install(pkg: Package) -> None:
         "generic": managers.generic.install,
         "github": managers.github.install,
         "golang": managers.golang.install,
+        "luarocks": managers.luarocks.install,
         "npm": managers.npm.install,
         "pypi": managers.pypi.install,
     }
@@ -90,14 +91,15 @@ def _link_bin(pkg: Package) -> None:
             resolver_map = {
                 "cargo": managers.cargo.bin_path,
                 "composer": managers.composer.bin_path,
+                "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
+                "exec": lambda target: _create_script(name, str(Path(target).absolute())),
                 "gem": lambda target: _create_script(
                     name,
                     str(managers.gem.bin_path(target).absolute()),
                     {"GEM_PATH": f"{pkg.dir}{':$GEM_PATH' if platform.system() != 'Windows' else ';%%GEM_PATH%%'}"},
                 ),
                 "golang": managers.golang.bin_path,
-                "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
-                "exec": lambda target: _create_script(name, str(Path(target).absolute())),
+                "luarocks": managers.luarocks.bin_path,
                 "npm": managers.npm.bin_path,
                 "pypi": managers.pypi.bin_path,
                 "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),

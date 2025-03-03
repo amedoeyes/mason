@@ -4,6 +4,7 @@ from . import gem
 from . import generic
 from . import github
 from . import golang
+from . import luarocks
 from . import npm
 from . import pypi
 
@@ -14,6 +15,7 @@ __all__ = [
     "generic",
     "github",
     "golang",
+    "luarocks",
     "npm",
     "pypi",
 ]
