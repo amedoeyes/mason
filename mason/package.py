@@ -76,6 +76,7 @@ class Package:
     params: dict[str, str]
     files: Optional[list[str] | dict[str, str]]
     build: Optional[Build]
+    extra_packages: list[str]
     bin: Optional[dict[str, str]]
     share: Optional[dict[str, str]]
     dir: Path
@@ -101,6 +102,7 @@ class Package:
         else:
             self.version = rest
         self.version = unquote(self.version)
+        self.extra_packages = data["source"].get("extra_packages", [])
         self.dir = config.packages_dir / self.name
 
         env = Environment()
