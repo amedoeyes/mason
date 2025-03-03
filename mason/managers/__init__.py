@@ -3,6 +3,7 @@ from . import composer
 from . import gem
 from . import generic
 from . import github
+from . import golang
 from . import npm
 from . import pypi
 
@@ -12,6 +13,7 @@ __all__ = [
     "gem",
     "generic",
     "github",
+    "golang",
     "npm",
     "pypi",
 ]

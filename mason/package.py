@@ -91,9 +91,16 @@ class Package:
         self.manager, rest = data["source"]["id"][4:].split("/", 1)
         self.package, rest = rest.split("@", 1)
         self.package = unquote(self.package)
-        self.version, rest = (rest.split("?", 1) + [""])[:2]
+        self.params = {}
+        if "?" in rest:
+            self.version, rest = rest.split("?", 1)
+            self.params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]}
+        elif "#" in rest:
+            self.version, rest = rest.split("#", 1)
+            self.package += f"/{rest}"
+        else:
+            self.version = rest
         self.version = unquote(self.version)
-        self.params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]} if rest else {}
         self.dir = config.packages_dir / self.name
 
         env = Environment()
@@ -131,8 +138,8 @@ class Package:
         else:
             self.files = None
 
-        if build := source.get("build"):
-            self.build = Build(build)
+        self.build = Build(build) if (build := source.get("build")) else None
 
         self.bin = data.get("bin")
         self.share = data.get("share")
+        print(self)
