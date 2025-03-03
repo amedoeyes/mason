@@ -1,11 +1,9 @@
 import json
-import os
-from pathlib import Path
 import platform
 import re
-import shlex
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import unquote
 
@@ -55,7 +53,7 @@ def _to_jinja_syntax(s):
 
 @dataclass
 class Build:
-    cmds: list[list[str]]
+    cmds: list[str]
     env: dict[str, str]
 
     def __init__(self, data: Any) -> None:
@@ -76,7 +74,7 @@ class Package:
     package: str
     version: str
     params: dict[str, str]
-    files: Optional[list[str]]
+    files: Optional[list[str] | dict[str, str]]
     build: Optional[Build]
     bin: Optional[dict[str, str]]
     share: Optional[dict[str, str]]
@@ -89,7 +87,7 @@ class Package:
         self.languages = data["languages"]
         self.categories = data["categories"]
         self.description = data["description"].replace("\n", " ").strip()
-        self.deprecation = data["deprecation"]["message"] if "deprecation" in data else None
+        self.deprecation = data.get("deprecation", {}).get("message")
         self.manager, rest = data["source"]["id"][4:].split("/", 1)
         self.package, rest = rest.split("@", 1)
         self.package = unquote(self.package)
@@ -104,22 +102,37 @@ class Package:
         env.globals["is_platform"] = _is_platform
         env.globals["version"] = self.version
 
-        assets = data["source"].get("asset")
-        if isinstance(assets, list):
-            data["source"]["asset"] = next((a for a in assets if _is_platform(a.get("target"))), None)
+        asset = data["source"].get("asset")
+        if isinstance(asset, list):
+            data["source"]["asset"] = next((a for a in asset if _is_platform(a.get("target"))), None)
 
-        builds = data["source"].get("build")
-        if isinstance(builds, list):
-            data["source"]["build"] = next((a for a in builds if _is_platform(a.get("target"))), None)
+        download = data["source"].get("download")
+        if isinstance(download, list):
+            data["source"]["download"] = next((a for a in download if _is_platform(a.get("target"))), None)
+
+        build = data["source"].get("build")
+        if isinstance(build, list):
+            data["source"]["build"] = next((a for a in build if _is_platform(a.get("target"))), None)
 
         env.globals.update(data)
 
         data_str = json.dumps(data)
         data_str = env.from_string(_to_jinja_syntax(data_str)).render()
-        data_str = env.from_string(_to_jinja_syntax(data_str)).render()  # have to do 2 passes because nesting :/
+        data_str = env.from_string(_to_jinja_syntax(data_str)).render()
         data = json.loads(data_str)
 
-        self.files = ([f] if isinstance(f, str) else f) if (f := data["source"].get("asset", {}).get("file")) else None
-        self.build = Build(b) if (b := data["source"].get("build")) else None
+        source = data["source"]
+
+        if asset := source.get("asset"):
+            files = asset.get("file")
+            self.files = [files] if isinstance(files, str) else files
+        elif download := source.get("download"):
+            self.files = download.get("files") or [download.get("file")]
+        else:
+            self.files = None
+
+        if build := source.get("build"):
+            self.build = Build(build)
+
         self.bin = data.get("bin")
         self.share = data.get("share")

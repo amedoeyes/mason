@@ -59,13 +59,14 @@ def _install(pkg: Package) -> None:
         "cargo": managers.cargo.install,
         "composer": managers.composer.install,
         "gem": managers.gem.install,
+        "generic": managers.generic.install,
         "github": managers.github.install,
         "npm": managers.npm.install,
         "pypi": managers.pypi.install,
     }
 
     if pkg.manager not in installer_map:
-        raise Exception(f"Manager for '{pkg.manager}' is not implemented")
+        raise Exception(f"Installer for '{pkg.manager}' is not implemented")
 
     print(f"Installing '{pkg.manager}' package '{pkg.package}@{pkg.version}'...")
     installer_map[pkg.manager](pkg)
