@@ -29,7 +29,7 @@ def main():
 
         parser_install = subparsers.add_parser("install", help="install a specific package", formatter_class=formatter)
         parser_install.set_defaults(func=commands.install)
-        parser_install.add_argument("packages", nargs="+").completer = ChoicesCompleter(
+        parser_install.add_argument("package", nargs="+").completer = ChoicesCompleter(
             [pkg["name"] for pkg in json.loads(config.registry_path.read_bytes())]
         )
 

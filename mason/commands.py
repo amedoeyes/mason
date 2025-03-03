@@ -43,10 +43,10 @@ def _create_script(path: Path, command: str, env: dict[str, str | int] | None = 
 def install(args) -> None:
     packages = json.loads(config.registry_path.read_bytes())
 
-    for pkg in args.packages:
-        pkg = next((p for p in packages if p["name"] == pkg), None)
+    for name in args.package:
+        pkg = next((p for p in packages if p["name"] == name), None)
         if not pkg:
-            raise Exception(f"Package '{args.package}' not found")
+            raise Exception(f"Package '{name}' not found")
 
         pkg = Package(pkg)
         if pkg.deprecation:
