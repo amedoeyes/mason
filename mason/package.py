@@ -39,8 +39,7 @@ def _is_platform(target: str | list[str]) -> bool:
     ]
     if system == "linux":
         possible_targets.append("linux")
-    if libc:
-        possible_targets.append(f"{system_map[system]}_{arch_map[arch]}_{libc}")
+        possible_targets.append(f"{system_map[system]}_{arch_map[arch]}_{libc if libc else 'gnu'}")
     return any(t in possible_targets for t in (target if isinstance(target, list) else [target]))
 
 
