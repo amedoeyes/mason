@@ -1,5 +1,6 @@
 import argparse
 import json
+from pathlib import Path
 import sys
 
 import argcomplete
@@ -60,4 +61,4 @@ def main():
         args.func(args)
 
     except Exception as e:
-        print(f"mason: {e}")
+        print(f"{Path(sys.argv[0]).name}: {e}")
