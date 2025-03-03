@@ -11,10 +11,19 @@ from mason.package import Package
 
 
 def _create_symlink(source: Path, dist: Path) -> None:
-    dist.parent.mkdir(parents=True, exist_ok=True)
-    if dist.is_symlink():
-        dist.unlink()
-    dist.symlink_to(source)
+    if source.is_dir():
+        source.mkdir(parents=True, exist_ok=True)
+        for file in [f for f in source.rglob("*") if f.is_file()]:
+            if (dist / file.name).is_symlink():
+                (dist / file.name).unlink()
+            print(f"Linking '{file}' -> '{dist / file.name}'...")
+            (dist / file.name).symlink_to(file)
+    else:
+        dist.parent.mkdir(parents=True, exist_ok=True)
+        if dist.is_symlink():
+            dist.unlink()
+        print(f"Linking '{dist}' -> '{source}'...")
+        dist.symlink_to(source)
 
 
 def _create_script(name: str, command: str, env: dict[str, str | int] | None = None) -> Path:
@@ -99,7 +108,6 @@ def _link_bin(pkg: Package) -> None:
         else:
             bin_path = pkg.dir / path
 
-        print(f"Linking '{name}' -> '{dist_path}'...")
         _create_symlink(bin_path, dist_path)
 
         if platform.system() != "Windows":
@@ -110,14 +118,7 @@ def _link_share(pkg: Package) -> None:
     for dist, path in (pkg.share or {}).items():
         dist_path = config.share_dir / dist
         share_path = pkg.dir / path
-
-        if dist.endswith("/"):
-            for file in share_path.iterdir():
-                print(f"Linking '{file.name}' -> '{dist_path / file.name}'...")
-                _create_symlink(file, dist_path / file.name)
-        else:
-            print(f"Linking '{path}' -> '{dist_path}'...")
-            _create_symlink(share_path, dist_path)
+        _create_symlink(share_path, dist_path)
 
 
 def install(args: Any) -> None:
