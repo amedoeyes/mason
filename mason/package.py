@@ -59,7 +59,7 @@ class Build:
     env: dict[str, str]
 
     def __init__(self, data: Any) -> None:
-        self.cmds = [shlex.split(os.path.expandvars(cmd)) for cmd in data["run"].splitlines()]
+        self.cmds = data["run"].splitlines()
         self.env = data.get("env", {})
 
 

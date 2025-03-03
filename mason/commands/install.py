@@ -75,8 +75,8 @@ def _build(pkg: Package) -> None:
     if pkg.build:
         print(f"Building '{pkg.name}'...")
         for cmd in pkg.build.cmds:
-            print(f"Running {' '.join(cmd)}")
-            subprocess.run(cmd, check=True, env=pkg.build.env)
+            print(f"Running '{cmd}'")
+            subprocess.run(cmd, check=True, env={**os.environ, **pkg.build.env}, shell=True)
 
 
 def _link_bin(pkg: Package) -> None:
