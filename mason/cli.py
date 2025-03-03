@@ -29,13 +29,13 @@ def main():
 
         parser_install = subparsers.add_parser("install", help="install a specific package", formatter_class=formatter)
         parser_install.set_defaults(func=commands.install)
-        parser_install.add_argument(
-            "packages", nargs="+", help="names of packages to install"
-        ).completer = ChoicesCompleter([pkg["name"] for pkg in json.loads(config.registry_path.read_bytes())])
+        parser_install.add_argument("packages", nargs="+").completer = ChoicesCompleter(
+            [pkg["name"] for pkg in json.loads(config.registry_path.read_bytes())]
+        )
 
         parser_search = subparsers.add_parser("search", help="search registry", formatter_class=formatter)
         parser_search.set_defaults(func=commands.search)
-        parser_search.add_argument("query", nargs="?", default="", help="search query")
+        parser_search.add_argument("query", nargs="?", default="")
         parser_search.add_argument(
             "-c",
             "--category",
