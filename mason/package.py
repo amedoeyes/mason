@@ -4,6 +4,7 @@ import platform
 import re
 import shlex
 import subprocess
+from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import unquote
 
@@ -49,6 +50,7 @@ def _to_jinja_syntax(s):
     return s
 
 
+@dataclass
 class Build:
     cmds: list[list[str]]
     env: dict[str, str]
@@ -57,10 +59,8 @@ class Build:
         self.cmds = [shlex.split(os.path.expandvars(cmd)) for cmd in data["run"].splitlines()]
         self.env = data.get("env", {})
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"
 
-
+@dataclass()
 class Package:
     name: str
     description: str
@@ -118,6 +118,3 @@ class Package:
         self.build = Build(b) if (b := data["source"].get("build")) else None
         self.bin = data.get("bin")
         self.share = data.get("share")
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"

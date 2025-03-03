@@ -4,8 +4,9 @@ from pathlib import Path
 import platform
 import subprocess
 import textwrap
+from typing import Any
 
-from mason import config, installers
+from mason import config, managers
 from mason.package import Package
 
 
@@ -16,7 +17,7 @@ def _create_symlink(source: Path, dist: Path) -> None:
     dist.symlink_to(source)
 
 
-def _create_script(path: Path, command: str, env: dict[str, str | int] | None = None) -> Path:
+def _create_script(name: str, command: str, env: dict[str, str | int] | None = None) -> Path:
     env = env or {}
     bash_template = textwrap.dedent("""\
         #!/usr/bin/env bash
@@ -28,6 +29,7 @@ def _create_script(path: Path, command: str, env: dict[str, str | int] | None = 
         {}
         {} %*
     """)
+    path = Path(name)
     path.write_text(
         (batch_template if platform.system() == "Windows" else bash_template).format(
             "\n".join([f"{'SET' if platform.system() == 'Windows' else 'export'} {k}={v}" for k, v in env.items()]),
@@ -40,7 +42,7 @@ def _create_script(path: Path, command: str, env: dict[str, str | int] | None = 
     return path
 
 
-def install(args) -> None:
+def install(args: Any) -> None:
     packages = json.loads(config.registry_path.read_bytes())
 
     for name in args.package:
@@ -58,10 +60,10 @@ def install(args) -> None:
         os.environ["PWD"] = os.getcwd()
 
         installer_map = {
-            "cargo": installers.cargo,
-            "github": installers.github,
-            "npm": installers.npm,
-            "pypi": installers.pypi,
+            "cargo": managers.cargo.install,
+            "github": managers.github.install,
+            "npm": managers.npm.install,
+            "pypi": managers.pypi.install,
         }
         if pkg.manager not in installer_map:
             raise Exception(f"Installer for '{pkg.manager}' is not implemented")
@@ -77,18 +79,18 @@ def install(args) -> None:
         for name, path in (pkg.bin or {}).items():
             bin_path = Path()
             if ":" in path:
-                manager, bin = path.split(":")
+                manager, target = path.split(":")
                 resolver_map = {
-                    "cargo": lambda: pkg_dir / (f"bin/{bin}" if platform.system() != "Windows" else f"bin/{bin}.exe"),
-                    "dotnet": lambda: _create_script(pkg_dir / name, f"dotnet {Path(bin).absolute()}"),
-                    "exec": lambda: _create_script(pkg_dir / name, str(Path(bin).absolute())),
-                    "npm": lambda: pkg_dir / f"node_modules/.bin/{bin}",
-                    "pypi": lambda: pkg_dir / f"venv/bin/{bin}",
-                    "pyvenv": lambda: _create_script(pkg_dir / name, f"{pkg_dir / 'venv/bin/python'} -m {bin}"),
+                    "cargo": managers.cargo.bin_path,
+                    "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
+                    "exec": lambda target: _create_script(name, str(Path(target).absolute())),
+                    "npm": managers.npm.bin_path,
+                    "pypi": managers.pypi.bin_path,
+                    "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
                 }
                 if manager not in resolver_map:
                     raise Exception(f"resolver for '{manager}' is not implemented")
-                bin_path = resolver_map[manager]()
+                bin_path = pkg_dir / resolver_map[manager](target)
             else:
                 bin_path = pkg_dir / path
             if platform.system() != "Windows":
@@ -108,26 +110,3 @@ def install(args) -> None:
             else:
                 print(f"Linking '{path}' -> '{dist_path}'...")
                 _create_symlink(share_path, dist_path)
-
-
-def search(args) -> None:
-    packages = json.loads(config.registry_path.read_bytes())
-
-    def matches(pkg):
-        return (
-            (not args.category or any(args.category.casefold() == c.casefold() for c in pkg["categories"]))
-            and (not args.language or any(args.language.casefold() == l.casefold() for l in pkg["languages"]))
-            and (args.query in pkg["name"] or args.query in pkg["description"])
-        )
-
-    for pkg in map(lambda pkg: Package(pkg), filter(matches, packages)):
-        print(f"{pkg.name} {pkg.version}")
-        if pkg.deprecation:
-            print(f"    Deprecation: {pkg.deprecation}")
-        print(f"    Description: {pkg.description}")
-        print(f"    Homepage: {pkg.homepage}")
-        print(f"    Categories: {', '.join(pkg.categories)}")
-        if pkg.languages:
-            print(f"    Languages: {', '.join(pkg.languages)}")
-        print(f"    Licenses: {', '.join(pkg.licenses)}")
-        print()

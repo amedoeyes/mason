@@ -1,14 +1,12 @@
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import argcomplete
 from argcomplete.completers import ChoicesCompleter
 
-from mason import commands
-import mason.config as config
-from mason.registry import download_registry
+from mason import commands, config, registry
 
 
 def main():
@@ -17,7 +15,7 @@ def main():
             dir.mkdir(parents=True, exist_ok=True)
 
         if not config.registry_path.exists():
-            download_registry()
+            registry.download()
 
         def formatter(prog):
             return argparse.HelpFormatter(prog, width=80, max_help_position=1000)
@@ -56,7 +54,7 @@ def main():
         args = parser.parse_args()
 
         if args.update_registry:
-            download_registry()
+            registry.update()
 
         args.func(args)
 

@@ -4,6 +4,9 @@ import shutil
 import tarfile
 import zipfile
 
+import requests
+from tqdm import tqdm
+
 
 def extract_file(file_path: Path, out_path=Path(".")) -> None:
     print(f"Extracting '{file_path}'...")
@@ -26,3 +29,14 @@ def extract_file(file_path: Path, out_path=Path(".")) -> None:
 
 def is_extractable(file_path: Path) -> bool:
     return file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix in {".tgz", ".tar", ".gz", ".zip"}
+
+
+def download_file(url: str, out_path: Path) -> None:
+    print(f"Downloading '{url}'...")
+    with requests.get(url, stream=True) as response:
+        response.raise_for_status()
+        total_size = int(response.headers.get("content-length", 0))
+        with out_path.open("wb") as f, tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024) as progress:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                progress.update(len(chunk))

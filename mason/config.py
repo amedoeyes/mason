@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-
 registry_repo = os.getenv("MASON_REGISTRY_REPO", "mason-org/mason-registry")
 cache_dir = Path(
     os.getenv("MASON_CACHE_DIR", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "mason"))

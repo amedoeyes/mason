@@ -1,9 +1,11 @@
 import hashlib
 from pathlib import Path
 
-import mason.config as config
-from mason.downloaders import download_github_release
+from mason import config
+from mason.managers import github
 from mason.utility import extract_file
+
+_checksums_file = config.cache_dir / "checksums.txt"
 
 
 def _verify_checksums(checksum_file: Path) -> bool:
@@ -15,14 +17,19 @@ def _verify_checksums(checksum_file: Path) -> bool:
     return True
 
 
-def download_registry() -> None:
-    checksums_file = config.cache_dir / "checksums.txt"
-    if checksums_file.exists():
-        print("Checking for update...")
-    download_github_release(config.registry_repo, "checksums.txt", "latest", config.cache_dir)
-    if _verify_checksums(checksums_file):
+def download() -> None:
+    print("Downloading registry...")
+    github.download_release(config.registry_repo, "checksums.txt", "latest", config.cache_dir)
+    github.download_release(config.registry_repo, "registry.json.zip", "latest", config.cache_dir)
+    extract_file(config.cache_dir / "registry.json.zip", config.cache_dir)
+
+
+def update() -> None:
+    print("Checking for update...")
+    github.download_release(config.registry_repo, "checksums.txt", "latest", config.cache_dir)
+    if _verify_checksums(_checksums_file):
         print("Registry up-to-date")
         return
-    print("Downloading registry..." if not config.registry_path.exists() else "Updating registry...")
-    download_github_release(config.registry_repo, "registry.json.zip", "latest", config.cache_dir)
+    print("Updating registry...")
+    github.download_release(config.registry_repo, "registry.json.zip", "latest", config.cache_dir)
     extract_file(config.cache_dir / "registry.json.zip", config.cache_dir)
