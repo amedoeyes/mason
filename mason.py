@@ -134,30 +134,10 @@ def is_platform(target: str | list[str]) -> bool:
     return any(t in possible_targets for t in (target if isinstance(target, list) else [target]))
 
 
-def parse_source_id(source_id: str) -> tuple[str, str, str, dict[str, str] | None]:
-    manager, rest = source_id[4:].split("/", 1)
-    package, rest = rest.split("@", 1)
-    version, rest = (rest.split("?", 1) + [""])[:2]
-    params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]} if rest else None
-    return (manager, unquote(package), unquote(version), params)
-
-
 def to_jinja_syntax(s):
     s = re.sub(r"\|\|", "|", s)
     s = re.sub(r'strip_prefix\s*\\?"(.*?)\\?"', r'strip_prefix("\1")', s)
     return s
-
-
-class Asset:
-    files: list[str]
-    bin: Optional[str | dict[str, str]]
-
-    def __init__(self, data: Any) -> None:
-        self.files = [data["file"]] if isinstance(data["file"], str) else data["file"]
-        self.bin = data.get("bin", None)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"
 
 
 class Build:
@@ -180,11 +160,11 @@ class Package:
     languages: Optional[list[str]]
     categories: list[str]
     deprecation: Optional[str]
+    manager: str
     package: str
     version: str
-    manager: str
     params: dict[str, str]
-    asset: Optional[Asset]
+    files: Optional[list[str]]
     build: Optional[Build]
     bin: Optional[dict[str, str]]
     share: Optional[dict[str, str]]
@@ -218,15 +198,15 @@ class Package:
 
         env.globals.update(data)
 
-        data_str = json.dumps(data, indent=2)
+        data_str = json.dumps(data)
         data_str = env.from_string(to_jinja_syntax(data_str)).render()
         data_str = env.from_string(to_jinja_syntax(data_str)).render()  # have to do 2 passes because nesting :/
         data = json.loads(data_str)
 
-        self.asset = Asset(asset) if (asset := data["source"].get("asset")) else None
-        self.build = Build(build) if (build := data["source"].get("build")) else None
-        self.bin = data.get("bin", None)
-        self.share = data.get("share", None)
+        self.files = ([f] if isinstance(f, str) else f) if (f := data["source"].get("asset", {}).get("file")) else None
+        self.build = Build(b) if (b := data["source"].get("build")) else None
+        self.bin = data.get("bin")
+        self.share = data.get("share")
 
     def __repr__(self):
         return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in vars(self).items())})"
@@ -278,8 +258,8 @@ def install(args) -> None:
             subprocess.run(["python", "-m", "venv", "venv"])
             subprocess.run(["./venv/bin/pip", "install", f"{pkg.package}{extra}=={pkg.version}"])
         case "github":
-            if pkg.asset:
-                for f in pkg.asset.files:
+            if pkg.files:
+                for f in pkg.files:
                     asset_path = Path(f)
                     dist_path = Path(".")
                     match f.split(":", 1):
