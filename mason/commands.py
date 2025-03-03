@@ -43,70 +43,71 @@ def _create_script(path: Path, command: str, env: dict[str, str | int] | None = 
 def install(args) -> None:
     packages = json.loads(config.registry_path.read_bytes())
 
-    pkg = next((p for p in packages if p["name"] == args.package), None)
-    if not pkg:
-        raise Exception(f"Package '{args.package}' not found")
+    for pkg in args.packages:
+        pkg = next((p for p in packages if p["name"] == pkg), None)
+        if not pkg:
+            raise Exception(f"Package '{args.package}' not found")
 
-    pkg = Package(pkg)
-    if pkg.deprecation:
-        raise Exception(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
+        pkg = Package(pkg)
+        if pkg.deprecation:
+            raise Exception(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
 
-    package_dir = config.packages_dir / pkg.name
-    package_dir.mkdir(parents=True, exist_ok=True)
-    os.chdir(package_dir)
-    os.environ["PWD"] = os.getcwd()
+        pkg_dir = config.packages_dir / pkg.name
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        os.chdir(pkg_dir)
+        os.environ["PWD"] = os.getcwd()
 
-    installer_map = {
-        "cargo": installers.cargo,
-        "github": installers.github,
-        "npm": installers.npm,
-        "pypi": installers.pypi,
-    }
-    if pkg.manager not in installer_map:
-        raise Exception(f"Installer for '{pkg.manager}' is not implemented")
-    print(f"installing '{pkg.name}'...")
-    installer_map[pkg.manager](pkg)
+        installer_map = {
+            "cargo": installers.cargo,
+            "github": installers.github,
+            "npm": installers.npm,
+            "pypi": installers.pypi,
+        }
+        if pkg.manager not in installer_map:
+            raise Exception(f"Installer for '{pkg.manager}' is not implemented")
+        print(f"installing '{pkg.name}'...")
+        installer_map[pkg.manager](pkg)
 
-    if pkg.build:
-        print(f"Building '{pkg.name}'...")
-        for cmd in pkg.build.cmds:
-            print(f"Running {' '.join(cmd)}")
-            subprocess.run(cmd, check=True, env=pkg.build.env)
+        if pkg.build:
+            print(f"Building '{pkg.name}'...")
+            for cmd in pkg.build.cmds:
+                print(f"Running {' '.join(cmd)}")
+                subprocess.run(cmd, check=True, env=pkg.build.env)
 
-    for name, path in (pkg.bin or {}).items():
-        bin_path = Path()
-        if ":" in path:
-            manager, bin = path.split(":")
-            resolver_map = {
-                "cargo": lambda: package_dir / (f"bin/{bin}" if platform.system() != "Windows" else f"bin/{bin}.exe"),
-                "dotnet": lambda: _create_script(package_dir / name, f"dotnet {Path(bin).absolute()}"),
-                "exec": lambda: _create_script(package_dir / name, str(Path(bin).absolute())),
-                "npm": lambda: package_dir / f"node_modules/.bin/{bin}",
-                "pypi": lambda: package_dir / f"venv/bin/{bin}",
-                "pyvenv": lambda: _create_script(package_dir / name, f"{package_dir / 'venv/bin/python'} -m {bin}"),
-            }
-            if manager not in resolver_map:
-                raise Exception(f"resolver for '{manager}' is not implemented")
-            bin_path = resolver_map[manager]()
-        else:
-            bin_path = package_dir / path
-        if platform.system() != "Windows":
-            bin_path.chmod(bin_path.stat().st_mode | 0o111)
-        dist_path = config.bin_dir / name
-        print(f"Linking '{name}' -> '{dist_path}'...")
-        _create_symlink(bin_path, dist_path)
+        for name, path in (pkg.bin or {}).items():
+            bin_path = Path()
+            if ":" in path:
+                manager, bin = path.split(":")
+                resolver_map = {
+                    "cargo": lambda: pkg_dir / (f"bin/{bin}" if platform.system() != "Windows" else f"bin/{bin}.exe"),
+                    "dotnet": lambda: _create_script(pkg_dir / name, f"dotnet {Path(bin).absolute()}"),
+                    "exec": lambda: _create_script(pkg_dir / name, str(Path(bin).absolute())),
+                    "npm": lambda: pkg_dir / f"node_modules/.bin/{bin}",
+                    "pypi": lambda: pkg_dir / f"venv/bin/{bin}",
+                    "pyvenv": lambda: _create_script(pkg_dir / name, f"{pkg_dir / 'venv/bin/python'} -m {bin}"),
+                }
+                if manager not in resolver_map:
+                    raise Exception(f"resolver for '{manager}' is not implemented")
+                bin_path = resolver_map[manager]()
+            else:
+                bin_path = pkg_dir / path
+            if platform.system() != "Windows":
+                bin_path.chmod(bin_path.stat().st_mode | 0o111)
+            dist_path = config.bin_dir / name
+            print(f"Linking '{name}' -> '{dist_path}'...")
+            _create_symlink(bin_path, dist_path)
 
-    for dist, path in (pkg.share or {}).items():
-        dist_path = config.share_dir / dist
-        share_path = package_dir / path
-        if dist.endswith("/"):
-            dist_path.mkdir(parents=True, exist_ok=True)
-            for file in share_path.iterdir():
-                print(f"Linking '{file.name}' -> '{dist_path / file.name}'...")
-                _create_symlink(file, dist_path / file.name)
-        else:
-            print(f"Linking '{path}' -> '{dist_path}'...")
-            _create_symlink(share_path, dist_path)
+        for dist, path in (pkg.share or {}).items():
+            dist_path = config.share_dir / dist
+            share_path = pkg_dir / path
+            if dist.endswith("/"):
+                dist_path.mkdir(parents=True, exist_ok=True)
+                for file in share_path.iterdir():
+                    print(f"Linking '{file.name}' -> '{dist_path / file.name}'...")
+                    _create_symlink(file, dist_path / file.name)
+            else:
+                print(f"Linking '{path}' -> '{dist_path}'...")
+                _create_symlink(share_path, dist_path)
 
 
 def search(args) -> None:
