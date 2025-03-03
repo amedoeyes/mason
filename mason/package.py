@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 import platform
 import re
 import shlex
@@ -9,6 +10,8 @@ from typing import Any, Optional
 from urllib.parse import unquote
 
 from jinja2 import Environment
+
+from mason import config
 
 
 def _is_platform(target: str | list[str]) -> bool:
@@ -77,6 +80,7 @@ class Package:
     build: Optional[Build]
     bin: Optional[dict[str, str]]
     share: Optional[dict[str, str]]
+    dir: Path
 
     def __init__(self, data: Any) -> None:
         self.name = data["name"]
@@ -92,6 +96,7 @@ class Package:
         self.version, rest = (rest.split("?", 1) + [""])[:2]
         self.version = unquote(self.version)
         self.params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]} if rest else {}
+        self.dir = config.packages_dir / self.name
 
         env = Environment()
         env.filters["take_if_not"] = lambda value, cond: value if not cond else None

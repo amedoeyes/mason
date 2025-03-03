@@ -37,7 +37,7 @@ def install(pkg: Package) -> None:
             if is_extractable(asset_path):
                 extract_file(asset_path, dist_path)
     else:
-        if (config.packages_dir / pkg.name / ".git").exists():
+        if (pkg.dir / ".git").exists():
             subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", pkg.version], check=True)
             subprocess.run(["git", "reset", "--hard", pkg.version], check=True)
         else:

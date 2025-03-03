@@ -29,7 +29,7 @@ def _create_script(name: str, command: str, env: dict[str, str | int] | None = N
         {}
         {} %*
     """)
-    path = Path(name)
+    path = Path(name + ".cmd" if platform.system() == "Windows" else "")
     path.write_text(
         (batch_template if platform.system() == "Windows" else bash_template).format(
             "\n".join([f"{'SET' if platform.system() == 'Windows' else 'export'} {k}={v}" for k, v in env.items()]),
@@ -54,9 +54,8 @@ def install(args: Any) -> None:
         if pkg.deprecation:
             raise Exception(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
 
-        pkg_dir = config.packages_dir / pkg.name
-        pkg_dir.mkdir(parents=True, exist_ok=True)
-        os.chdir(pkg_dir)
+        pkg.dir.mkdir(parents=True, exist_ok=True)
+        os.chdir(pkg.dir)
         os.environ["PWD"] = os.getcwd()
 
         installer_map = {
@@ -92,9 +91,9 @@ def install(args: Any) -> None:
                 }
                 if manager not in resolver_map:
                     raise Exception(f"resolver for '{manager}' is not implemented")
-                bin_path = pkg_dir / resolver_map[manager](target)
+                bin_path = pkg.dir / resolver_map[manager](target)
             else:
-                bin_path = pkg_dir / path
+                bin_path = pkg.dir / path
             if platform.system() != "Windows":
                 bin_path.chmod(bin_path.stat().st_mode | 0o111)
             dist_path = config.bin_dir / name
@@ -103,7 +102,7 @@ def install(args: Any) -> None:
 
         for dist, path in (pkg.share or {}).items():
             dist_path = config.share_dir / dist
-            share_path = pkg_dir / path
+            share_path = pkg.dir / path
             if dist.endswith("/"):
                 dist_path.mkdir(parents=True, exist_ok=True)
                 for file in share_path.iterdir():
