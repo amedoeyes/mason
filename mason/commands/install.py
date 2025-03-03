@@ -29,7 +29,7 @@ def _create_script(name: str, command: str, env: dict[str, str | int] | None = N
         {}
         {} %*
     """)
-    path = Path(name + ".cmd" if platform.system() == "Windows" else "")
+    path = Path(name + (".cmd" if platform.system() == "Windows" else ""))
     path.write_text(
         (batch_template if platform.system() == "Windows" else bash_template).format(
             "\n".join([f"{'SET' if platform.system() == 'Windows' else 'export'} {k}={v}" for k, v in env.items()]),
@@ -46,11 +46,11 @@ def install(args: Any) -> None:
     packages = json.loads(config.registry_path.read_bytes())
 
     for name in args.package:
-        pkg = next((p for p in packages if p["name"] == name), None)
-        if not pkg:
+        pkg_data = next((p for p in packages if p["name"] == name), None)
+        if not pkg_data:
             raise Exception(f"Package '{name}' not found")
 
-        pkg = Package(pkg)
+        pkg = Package(pkg_data)
         if pkg.deprecation:
             raise Exception(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
 
@@ -61,6 +61,7 @@ def install(args: Any) -> None:
         installer_map = {
             "cargo": managers.cargo.install,
             "composer": managers.composer.install,
+            "gem": managers.gem.install,
             "github": managers.github.install,
             "npm": managers.npm.install,
             "pypi": managers.pypi.install,
@@ -83,6 +84,11 @@ def install(args: Any) -> None:
                 resolver_map = {
                     "cargo": managers.cargo.bin_path,
                     "composer": managers.composer.bin_path,
+                    "gem": lambda target: _create_script(
+                        name,
+                        str(managers.gem.bin_path(target).absolute()),
+                        {"GEM_PATH": f"{pkg.dir}{':$GEM_PATH' if platform.system() != 'Windows' else ';%%GEM_PATH%%'}"},
+                    ),
                     "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
                     "exec": lambda target: _create_script(name, str(Path(target).absolute())),
                     "npm": managers.npm.bin_path,
