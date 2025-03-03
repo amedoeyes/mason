@@ -1,5 +1,9 @@
 import argparse
+import json
 import sys
+
+import argcomplete
+from argcomplete.completers import ChoicesCompleter
 
 from mason import commands
 import mason.config as config
@@ -24,7 +28,9 @@ def main():
 
         parser_install = subparsers.add_parser("install", help="install a specific package", formatter_class=formatter)
         parser_install.set_defaults(func=commands.install)
-        parser_install.add_argument("package", help="name of package to install")
+        parser_install.add_argument("package", help="name of package to install").completer = ChoicesCompleter(
+            [pkg["name"] for pkg in json.loads(config.registry_path.read_bytes())]
+        )
 
         parser_search = subparsers.add_parser("search", help="search registry", formatter_class=formatter)
         parser_search.set_defaults(func=commands.search)
@@ -39,7 +45,6 @@ def main():
         parser_search.add_argument("-l", "--language", metavar="language", help="specify language for search")
 
         parser.add_argument("-u", "--update-registry", action="store_true", help="update mason registry")
-        parser.add_argument("--completions", action="store_true", help="Generate shell completion script")
 
         argcomplete.autocomplete(parser)
 
