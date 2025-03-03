@@ -61,13 +61,14 @@ def install(args: Any) -> None:
 
         installer_map = {
             "cargo": managers.cargo.install,
+            "composer": managers.composer.install,
             "github": managers.github.install,
             "npm": managers.npm.install,
             "pypi": managers.pypi.install,
         }
         if pkg.manager not in installer_map:
-            raise Exception(f"Installer for '{pkg.manager}' is not implemented")
-        print(f"installing '{pkg.name}'...")
+            raise Exception(f"Manager for '{pkg.manager}' is not implemented")
+        print(f"Installing '{pkg.manager}' package '{pkg.package}@{pkg.version}'...")
         installer_map[pkg.manager](pkg)
 
         if pkg.build:
@@ -82,6 +83,7 @@ def install(args: Any) -> None:
                 manager, target = path.split(":")
                 resolver_map = {
                     "cargo": managers.cargo.bin_path,
+                    "composer": managers.composer.bin_path,
                     "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
                     "exec": lambda target: _create_script(name, str(Path(target).absolute())),
                     "npm": managers.npm.bin_path,
