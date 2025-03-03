@@ -7,7 +7,7 @@ from mason.utility import extract_file
 
 
 def _verify_checksums(checksum_file: Path) -> bool:
-    for line in checksum_file.read_text():
+    for line in checksum_file.read_text().splitlines():
         expected_hash, file = line.split()
         file_path = checksum_file.parent / file
         if not file_path.exists() or hashlib.sha256(file_path.read_bytes()).hexdigest() != expected_hash:
