@@ -1,23 +1,5 @@
-from . import cargo
-from . import composer
-from . import gem
-from . import generic
-from . import github
-from . import golang
-from . import luarocks
-from . import npm
-from . import nuget
-from . import pypi
+import pkgutil
+import importlib
 
-__all__ = [
-    "cargo",
-    "composer",
-    "gem",
-    "generic",
-    "github",
-    "golang",
-    "luarocks",
-    "npm",
-    "nuget",
-    "pypi",
-]
+for _, module_name, _ in pkgutil.iter_modules(__path__):
+    globals()[module_name] = importlib.import_module(f".{module_name}", __name__)
