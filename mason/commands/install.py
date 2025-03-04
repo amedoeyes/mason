@@ -65,6 +65,7 @@ def _install(pkg: Package) -> None:
         "luarocks": managers.luarocks.install,
         "npm": managers.npm.install,
         "nuget": managers.nuget.install,
+        "opam": managers.opam.install,
         "pypi": managers.pypi.install,
     }
 
@@ -103,6 +104,7 @@ def _link_bin(pkg: Package) -> None:
                 "luarocks": managers.luarocks.bin_path,
                 "npm": managers.npm.bin_path,
                 "nuget": managers.nuget.bin_path,
+                "opam": managers.opam.bin_path,
                 "pypi": managers.pypi.bin_path,
                 "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
             }
