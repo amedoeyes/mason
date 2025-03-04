@@ -1,7 +1,9 @@
 import gzip
+import os
 from pathlib import Path
 import shutil
 import tarfile
+from typing import Any
 import zipfile
 
 import requests
@@ -40,3 +42,7 @@ def download_file(url: str, out_path: Path) -> None:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
                 progress.update(len(chunk))
+
+
+def select_by_os(unix: Any, windows: Any) -> Any:
+    return windows if os.name == "nt" else unix
