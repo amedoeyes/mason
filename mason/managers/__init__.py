@@ -6,6 +6,7 @@ from . import github
 from . import golang
 from . import luarocks
 from . import npm
+from . import nuget
 from . import pypi
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "golang",
     "luarocks",
     "npm",
+    "nuget",
     "pypi",
 ]
