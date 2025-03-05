@@ -212,7 +212,7 @@ def install(args: Any) -> None:
                     case "cargo":
                         bin_path = Path("bin") / select_by_os(unix=target, windows=f"{target}.exe")
                     case "composer":
-                        bin_path = Path("bin") / "vendor" / select_by_os(unix=target, windows=f"{target}.bat")
+                        bin_path = Path("vendor") / "bin" / select_by_os(unix=target, windows=f"{target}.bat")
                     case "dotnet":
                         bin_path = _create_script(name, f'dotnet "{Path(target).absolute()}"')
                     case "exec":
