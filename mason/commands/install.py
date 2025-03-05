@@ -6,7 +6,7 @@ import subprocess
 import textwrap
 from typing import Any
 
-from mason import config, managers
+from mason import config, installers
 from mason.package import Package
 
 
@@ -56,17 +56,17 @@ def _create_script(name: str, command: str, env: dict[str, str | int] | None = N
 
 def _install(pkg: Package) -> None:
     installer_map = {
-        "cargo": managers.cargo.install,
-        "composer": managers.composer.install,
-        "gem": managers.gem.install,
-        "generic": managers.generic.install,
-        "github": managers.github.install,
-        "golang": managers.golang.install,
-        "luarocks": managers.luarocks.install,
-        "npm": managers.npm.install,
-        "nuget": managers.nuget.install,
-        "opam": managers.opam.install,
-        "pypi": managers.pypi.install,
+        "cargo": installers.cargo.install,
+        "composer": installers.composer.install,
+        "gem": installers.gem.install,
+        "generic": installers.generic.install,
+        "github": installers.github.install,
+        "golang": installers.golang.install,
+        "luarocks": installers.luarocks.install,
+        "npm": installers.npm.install,
+        "nuget": installers.nuget.install,
+        "opam": installers.opam.install,
+        "pypi": installers.pypi.install,
     }
 
     if pkg.purl.type not in installer_map:
@@ -91,29 +91,29 @@ def _link_bin(pkg: Package) -> None:
 
         if ":" in path:
             resolver_map = {
-                "cargo": managers.cargo.bin_path,
-                "composer": managers.composer.bin_path,
+                "cargo": installers.cargo.bin_path,
+                "composer": installers.composer.bin_path,
                 "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
                 "exec": lambda target: _create_script(name, str(Path(target).absolute())),
                 "gem": lambda target: _create_script(
                     name,
-                    str(managers.gem.bin_path(target).absolute()),
+                    str(installers.gem.bin_path(target).absolute()),
                     {"GEM_PATH": f"{pkg.dir}{':$GEM_PATH' if platform.system() != 'Windows' else ';%%GEM_PATH%%'}"},
                 ),
-                "golang": managers.golang.bin_path,
-                "luarocks": managers.luarocks.bin_path,
-                "npm": managers.npm.bin_path,
-                "nuget": managers.nuget.bin_path,
-                "opam": managers.opam.bin_path,
-                "pypi": managers.pypi.bin_path,
+                "golang": installers.golang.bin_path,
+                "luarocks": installers.luarocks.bin_path,
+                "npm": installers.npm.bin_path,
+                "nuget": installers.nuget.bin_path,
+                "opam": installers.opam.bin_path,
+                "pypi": installers.pypi.bin_path,
                 "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
             }
 
-            manager, target = path.split(":")
-            if manager not in resolver_map:
-                raise Exception(f"Resolver for '{manager}' is not implemented")
+            type, target = path.split(":")
+            if type not in resolver_map:
+                raise Exception(f"Resolver for '{type}' is not implemented")
 
-            bin_path = pkg.dir / resolver_map[manager](target)
+            bin_path = pkg.dir / resolver_map[type](target)
         else:
             bin_path = pkg.dir / path
 

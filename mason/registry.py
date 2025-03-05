@@ -2,7 +2,7 @@ import hashlib
 from pathlib import Path
 
 from mason import config
-from mason.managers import github
+from mason.installers import github
 from mason.utility import extract_file
 
 _checksums_file = config.cache_dir / "checksums.txt"

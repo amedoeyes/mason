@@ -1,7 +1,8 @@
 import os
-from pathlib import Path
 import platform
 import subprocess
+from pathlib import Path
+
 from mason.package import Package
 
 
