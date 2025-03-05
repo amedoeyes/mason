@@ -11,15 +11,16 @@ from mason.package import Package
 
 
 def _create_symlink(source: Path, dist: Path) -> None:
+    dist.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
-        source.mkdir(parents=True, exist_ok=True)
         for file in [f for f in source.rglob("*") if f.is_file()]:
-            if (dist / file.name).is_symlink():
-                (dist / file.name).unlink()
-            print(f"Linking '{file}' -> '{dist / file.name}'...")
-            (dist / file.name).symlink_to(file)
+            target = dist / file.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.is_symlink() or target.exists():
+                target.unlink()
+            print(f"Linking '{file}' -> '{target}'")
+            target.symlink_to(file)
     else:
-        dist.parent.mkdir(parents=True, exist_ok=True)
         if dist.is_symlink():
             dist.unlink()
         print(f"Linking '{dist}' -> '{source}'...")
