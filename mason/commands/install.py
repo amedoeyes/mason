@@ -67,6 +67,7 @@ def _install(pkg: Package) -> None:
         "npm": installers.npm.install,
         "nuget": installers.nuget.install,
         "opam": installers.opam.install,
+        "openvsx": installers.openvsx.install,
         "pypi": installers.pypi.install,
     }
 
