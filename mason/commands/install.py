@@ -142,7 +142,9 @@ def install(args: Any) -> None:
                         _run(["git", "fetch", "--depth=1", "--tags", "origin", version])
                         _run(["git", "reset", "--hard", version])
                     else:
-                        _run(["git", "clone", "--depth=1", f"https://github.com/{repo}.git", "--branch", version, "."])
+                        _run(["git", "clone", "--depth=1", f"https://github.com/{repo}.git", "."])
+                        _run(["git", "fetch", "--depth=1", "--tags", "origin", version])
+                        _run(["git", "checkout", version])
             case "golang":
                 _run(
                     ["go", "install", "-v", f"{namespace}/{name}{f'/{subpath}' if subpath else ''}@{version}"],
