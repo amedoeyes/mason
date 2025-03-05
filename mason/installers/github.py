@@ -22,20 +22,20 @@ def install(pkg: Package) -> None:
     if pkg.files:
         for f in pkg.files:
             asset_path = Path(f)
-            dist_path = Path(".")
+            out_path = Path(".")
             match f.split(":", 1):
                 case [ref, dist] if dist.endswith("/"):
-                    dist_path = Path(dist)
-                    dist_path.mkdir(parents=True, exist_ok=True)
-                    download_release(repo, ref, pkg.purl.version, dist_path)
-                    asset_path = dist_path / ref
+                    out_path = Path(dist)
+                    out_path.mkdir(parents=True, exist_ok=True)
+                    download_release(repo, ref, pkg.purl.version, out_path)
+                    asset_path = out_path / ref
                 case [ref, dist]:
                     download_release(repo, ref, pkg.purl.version)
                     asset_path = Path(ref).replace(dist)
                 case _:
                     download_release(repo, f, pkg.purl.version)
             if is_extractable(asset_path):
-                extract_file(asset_path, dist_path)
+                extract_file(asset_path, out_path)
     else:
         if (pkg.dir / ".git").exists():
             subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", pkg.purl.version], check=True)

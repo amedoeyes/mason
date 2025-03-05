@@ -20,7 +20,4 @@ def install(pkg: Package) -> None:
 
 
 def bin_path(target: str) -> Path:
-    return select_by_os(
-        unix=Path("bin") / target,
-        windows=Path("bin") / f"{target}.exe",
-    )
+    return Path("bin") / select_by_os(unix=target, windows=f"{target}.exe")

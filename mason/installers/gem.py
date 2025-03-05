@@ -1,9 +1,9 @@
 import os
-import platform
 import subprocess
 from pathlib import Path
 
 from mason.package import Package
+from mason.utility import select_by_os
 
 
 def install(pkg: Package) -> None:
@@ -24,7 +24,4 @@ def install(pkg: Package) -> None:
 
 
 def bin_path(target: str) -> Path:
-    if platform.system() != "Windows":
-        return Path(f"bin/{target}")
-    else:
-        return Path(f"bin/{target}.bat")
+    return Path("bin") / select_by_os(unix=target, windows=f"{target}.bat")
