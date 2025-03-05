@@ -111,6 +111,7 @@ def _link_bin(pkg: Package) -> None:
                     name, f"{select_by_os(unix='python3', windows='python')} {pkg.dir / target}"
                 ),
                 "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
+                "ruby": lambda target: _create_script(name, f"ruby {pkg.dir / target}"),
             }
 
             type, target = path.split(":")
