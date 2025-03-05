@@ -86,6 +86,7 @@ def _link_bin(pkg: Package) -> None:
     for name, path in (pkg.bin or {}).items():
         dest_path = config.bin_dir / name
         bin_path = Path()
+        print(name)
 
         if ":" in path:
             resolver_map = {
@@ -104,6 +105,9 @@ def _link_bin(pkg: Package) -> None:
                 "nuget": installers.nuget.bin_path,
                 "opam": installers.opam.bin_path,
                 "pypi": installers.pypi.bin_path,
+                "python": lambda target: _create_script(
+                    name, f"{select_by_os(unix='python3', windows='python')} {pkg.dir / target}"
+                ),
                 "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
             }
 
