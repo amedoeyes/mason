@@ -13,7 +13,7 @@ def install(pkg: Package) -> None:
             "--destdir=.",
             "--yes",
             "--verbose",
-            f"{pkg.package}.{pkg.version}",
+            f"{pkg.purl.name}.{pkg.purl.version}",
         ],
         check=True,
     )

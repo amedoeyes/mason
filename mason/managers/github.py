@@ -2,7 +2,6 @@ from pathlib import Path
 import subprocess
 
 import requests
-from mason import config
 from mason.package import Package
 from mason.utility import download_file, extract_file, is_extractable
 
@@ -23,25 +22,34 @@ def install(pkg: Package) -> None:
         for f in pkg.files:
             asset_path = Path(f)
             dist_path = Path(".")
+            repo = f"{pkg.purl.namespace}/{pkg.purl.name}"
             match f.split(":", 1):
                 case [ref, dist] if dist.endswith("/"):
                     dist_path = Path(dist)
                     dist_path.mkdir(parents=True, exist_ok=True)
-                    download_release(pkg.package, ref, pkg.version, dist_path)
+                    download_release(repo, ref, pkg.purl.version, dist_path)
                     asset_path = dist_path / ref
                 case [ref, dist]:
-                    download_release(pkg.package, ref, pkg.version)
+                    download_release(repo, ref, pkg.purl.version)
                     asset_path = Path(ref).replace(dist)
                 case _:
-                    download_release(pkg.package, f, pkg.version)
+                    download_release(repo, f, pkg.purl.version)
             if is_extractable(asset_path):
                 extract_file(asset_path, dist_path)
     else:
         if (pkg.dir / ".git").exists():
-            subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", pkg.version], check=True)
-            subprocess.run(["git", "reset", "--hard", pkg.version], check=True)
+            subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", pkg.purl.version], check=True)
+            subprocess.run(["git", "reset", "--hard", pkg.purl.version], check=True)
         else:
             subprocess.run(
-                ["git", "clone", "--depth=1", f"https://github.com/{pkg.package}.git", "--branch", pkg.version, "."],
+                [
+                    "git",
+                    "clone",
+                    "--depth=1",
+                    f"https://github.com/{pkg.purl.name}.git",
+                    "--branch",
+                    pkg.purl.version,
+                    ".",
+                ],
                 check=True,
             )

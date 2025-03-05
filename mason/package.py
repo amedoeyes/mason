@@ -2,7 +2,7 @@ import json
 import platform
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import unquote
@@ -61,6 +61,60 @@ class Build:
         self.env = data.get("env", {})
 
 
+@dataclass
+class Purl:
+    scheme: str
+    type: str
+    namespace: str
+    name: str
+    version: str
+    qualifiers: dict
+    subpath: str
+
+    def __init__(self, purl: str) -> None:
+        self.scheme = ""
+        self.type = ""
+        self.namespace = ""
+        self.name = ""
+        self.version = ""
+        self.qualifiers = {}
+        self.subpath = ""
+
+        if "#" in purl:
+            purl, subpath = purl.rsplit("#", 1)
+            self.subpath = "/".join([unquote(p) for p in subpath.strip("/").split("/") if p not in ["", ".", ".."]])
+
+        if "?" in purl:
+            purl, qualifiers_str = purl.rsplit("?", 1)
+            self.qualifiers = {
+                k.lower(): unquote(v).split(",") if k == "checksums" else unquote(v)
+                for k, v in (p.split("=", 1) for p in qualifiers_str.split("&"))
+                if v
+            }
+
+        if ":" in purl:
+            scheme, purl = purl.split(":", 1)
+            self.scheme = scheme.lower()
+
+        purl = purl.strip("/")
+        if "/" in purl:
+            type, purl = purl.split("/", 1)
+            self.type = type.lower()
+
+        if "@" in purl:
+            purl, version = purl.rsplit("@", 1)
+            self.version = unquote(version)
+
+        if "/" in purl:
+            purl, name = purl.rsplit("/", 1)
+            self.name = unquote(name)
+        else:
+            self.name = unquote(purl)
+            purl = ""
+
+        self.namespace = "/".join([unquote(p) for p in purl.split("/") if p != ""])
+
+
 @dataclass()
 class Package:
     name: str
@@ -70,10 +124,7 @@ class Package:
     languages: Optional[list[str]]
     categories: list[str]
     deprecation: Optional[str]
-    manager: str
-    package: str
-    version: str
-    params: dict[str, str]
+    purl: Purl
     files: Optional[list[str] | dict[str, str]]
     build: Optional[Build]
     extra_packages: list[str]
@@ -89,19 +140,7 @@ class Package:
         self.categories = data["categories"]
         self.description = data["description"].replace("\n", " ").strip()
         self.deprecation = data.get("deprecation", {}).get("message")
-        self.manager, rest = data["source"]["id"][4:].split("/", 1)
-        self.package, rest = rest.split("@", 1)
-        self.package = unquote(self.package)
-        self.params = {}
-        if "?" in rest:
-            self.version, rest = rest.split("?", 1)
-            self.params = {k: v for param in rest.split("&") for k, v in [param.split("=", 1)]}
-        elif "#" in rest:
-            self.version, rest = rest.split("#", 1)
-            self.package += f"/{rest}"
-        else:
-            self.version = rest
-        self.version = unquote(self.version)
+        self.purl = Purl(data["source"]["id"])
         self.extra_packages = data["source"].get("extra_packages", [])
         self.dir = config.packages_dir / self.name
 
@@ -109,7 +148,7 @@ class Package:
         env.filters["take_if_not"] = lambda value, cond: value if not cond else None
         env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
         env.globals["is_platform"] = _is_platform
-        env.globals["version"] = self.version
+        env.globals["version"] = self.purl.version
 
         asset = data["source"].get("asset")
         if isinstance(asset, list):

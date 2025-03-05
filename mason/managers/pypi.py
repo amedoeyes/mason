@@ -11,7 +11,7 @@ def install(pkg: Package) -> None:
         unix=Path("venv") / "bin" / "python",
         windows=Path("venv") / "Scripts" / "python.exe",
     )
-    extra = f"[{pkg.params['extra']}]" if "extra" in pkg.params else ""
+    extra = f"[{pkg.purl.qualifiers['extra']}]" if "extra" in pkg.purl.qualifiers else ""
     subprocess.run([python_bin, "-m", "venv", "venv", "--system-site-packages"], check=True)
     subprocess.run(
         [
@@ -22,7 +22,7 @@ def install(pkg: Package) -> None:
             "install",
             "--ignore-installed",
             "-U",
-            f"{pkg.package}{extra}=={pkg.version}",
+            f"{pkg.purl.name}{extra}=={pkg.purl.version}",
             *pkg.extra_packages,
         ],
         check=True,

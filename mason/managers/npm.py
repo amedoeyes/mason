@@ -1,13 +1,14 @@
-from pathlib import Path
 import platform
 import subprocess
+from pathlib import Path
+
 from mason.package import Package
 
 
 def install(pkg: Package) -> None:
-    subprocess.run(["npm", "init", "--yes", "--scope=mason"])
     Path(".npmrc").write_text("install-strategy=shallow")
-    subprocess.run(["npm", "install", f"{pkg.package}@{pkg.version}"] + pkg.extra_packages, check=True)
+    subprocess.run(["npm", "init", "--yes", "--scope=mason"])
+    subprocess.run(["npm", "install", f"{pkg.purl.name}@{pkg.purl.version}", *pkg.extra_packages], check=True)
 
 
 def bin_path(target: str) -> Path:

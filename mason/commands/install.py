@@ -69,11 +69,11 @@ def _install(pkg: Package) -> None:
         "pypi": managers.pypi.install,
     }
 
-    if pkg.manager not in installer_map:
-        raise Exception(f"Installer for '{pkg.manager}' is not implemented")
+    if pkg.purl.type not in installer_map:
+        raise Exception(f"Installer for '{pkg.purl.type}' is not implemented")
 
-    print(f"Installing '{pkg.manager}' package '{pkg.package}@{pkg.version}'...")
-    installer_map[pkg.manager](pkg)
+    print(f"Installing '{pkg.purl.type}' package '{pkg.purl.name}@{pkg.purl.version}'...")
+    installer_map[pkg.purl.type](pkg)
 
 
 def _build(pkg: Package) -> None:

@@ -1,18 +1,19 @@
 import os
-from pathlib import Path
 import platform
 import subprocess
+from pathlib import Path
+
 from mason.package import Package
 
 
 def install(pkg: Package) -> None:
     cmd = ["luarocks", "install", "--tree", os.getcwd()]
-    if pkg.params:
-        if repo_url := pkg.params.get("repository_url"):
+    if pkg.purl.qualifiers:
+        if repo_url := pkg.purl.qualifiers.get("repository_url"):
             cmd += ["--server", repo_url]
-        if pkg.params.get("dev") == "true":
+        if pkg.purl.qualifiers.get("dev") == "true":
             cmd.append("--dev")
-    cmd += [pkg.package, pkg.version]
+    cmd += [pkg.purl.name, pkg.purl.version]
     subprocess.run(cmd, check=True)
 
 

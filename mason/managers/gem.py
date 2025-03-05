@@ -15,7 +15,7 @@ def install(pkg: Package) -> None:
             "--install-dir=.",
             "--bindir=bin",
             "--no-document",
-            f"{pkg.package}:{pkg.version}",
+            f"{pkg.purl.name}:{pkg.purl.version}",
         ],
         env={"GEM_HOME": os.getcwd()},
         check=True,
