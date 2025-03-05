@@ -1,13 +1,13 @@
 import json
 import os
 from pathlib import Path
-import platform
 import subprocess
 import textwrap
 from typing import Any
 
 from mason import config, installers
 from mason.package import Package
+from mason.utility import select_by_os
 
 
 def _create_symlink(source: Path, dest: Path) -> None:
@@ -29,29 +29,25 @@ def _create_symlink(source: Path, dest: Path) -> None:
 
 def _create_script(name: str, command: str, env: dict[str, str | int] | None = None) -> Path:
     env = env or {}
-    bash_template = textwrap.dedent("""\
+    bash = textwrap.dedent("""\
         #!/usr/bin/env bash
         {}
         exec {} "$@"
     """)
-    batch_template = textwrap.dedent("""\
+    batch = textwrap.dedent("""\
         @ECHO off
         {}
         {} %*
     """)
 
-    path = Path(name + (".cmd" if platform.system() == "Windows" else ""))
+    path = Path(select_by_os(unix="name", windows=f"{name}.cmd"))
     path.write_text(
-        (batch_template if platform.system() == "Windows" else bash_template).format(
-            "\n".join([f"{'SET' if platform.system() == 'Windows' else 'export'} {k}={v}" for k, v in env.items()]),
+        select_by_os(unix=bash, windows=batch).format(
+            "\n".join([f"{select_by_os(unix='export', windows='SET')} {k}={v}" for k, v in env.items()]),
             command,
         ),
         encoding="utf-8",
     )
-
-    if platform.system() != "Windows":
-        path.chmod(path.stat().st_mode | 0o111)
-
     return path
 
 

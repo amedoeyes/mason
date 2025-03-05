@@ -9,4 +9,4 @@ def install(pkg: Package) -> None:
         out_path = Path(name)
         download_file(url, out_path)
         if is_extractable(out_path):
-            extract_file(Path(out_path))
+            extract_file(out_path)

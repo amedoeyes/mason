@@ -30,7 +30,7 @@ def extract_file(file_path: Path, out_path=Path(".")) -> None:
 
 
 def is_extractable(file_path: Path) -> bool:
-    return file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix in {".tgz", ".tar", ".gz", ".zip"}
+    return file_path.suffixes[-2:] == [".tar", ".gz"] or file_path.suffix in {".tgz", ".tar", ".gz", ".zip", ".vsix"}
 
 
 def download_file(url: str, out_path: Path) -> None:
