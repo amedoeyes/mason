@@ -25,10 +25,10 @@ def download() -> None:
 
 def update() -> None:
     print("Checking for update...")
-    download_github_release(config.registry_repo, "checksums.txt", "latest", config.cache_dir)
+    download_github_release(config.registry_repo, "checksums.txt", out_path=config.cache_dir)
     if _verify_checksums(_checksums_file):
         print("Registry up-to-date")
         return
     print("Updating registry...")
-    download_github_release(config.registry_repo, "registry.json.zip", "latest", config.cache_dir)
+    download_github_release(config.registry_repo, "registry.json.zip", out_path=config.cache_dir)
     extract_file(config.cache_dir / "registry.json.zip", config.cache_dir)
