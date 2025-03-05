@@ -152,7 +152,6 @@ def install(args: Any) -> None:
         os.chdir(pkg.dir)
         os.environ["PWD"] = os.getcwd()
 
-        _install(pkg)
-        _build(pkg)
-        _link_bin(pkg)
-        _link_share(pkg)
+
+        for dest, path in (pkg.opt or {}).items():
+            _create_symlink(pkg.dir / path, config.opt_dir / dest)

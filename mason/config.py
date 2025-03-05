@@ -10,5 +10,6 @@ data_dir = Path(
 ).expanduser()
 bin_dir = data_dir / "bin"
 share_dir = data_dir / "share"
+opt_dir = data_dir / "opt"
 packages_dir = data_dir / "packages"
 registry_path = cache_dir / "registry.json"

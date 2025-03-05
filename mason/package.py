@@ -130,6 +130,7 @@ class Package:
     extra_packages: list[str]
     bin: Optional[dict[str, str]]
     share: Optional[dict[str, str]]
+    opt: Optional[dict[str, str]]
     dir: Path
 
     def __init__(self, data: Any) -> None:
@@ -183,3 +184,4 @@ class Package:
 
         self.bin = data.get("bin")
         self.share = data.get("share")
+        self.opt = data.get("opt")
