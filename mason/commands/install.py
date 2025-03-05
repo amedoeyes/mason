@@ -101,6 +101,7 @@ def _link_bin(pkg: Package) -> None:
                 ),
                 "golang": installers.golang.bin_path,
                 "luarocks": installers.luarocks.bin_path,
+                "node": lambda target: _create_script(name, f"node {pkg.dir / target}"),
                 "npm": installers.npm.bin_path,
                 "nuget": installers.nuget.bin_path,
                 "opam": installers.opam.bin_path,
