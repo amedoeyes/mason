@@ -10,21 +10,21 @@ from mason import config, installers
 from mason.package import Package
 
 
-def _create_symlink(source: Path, dist: Path) -> None:
-    dist.parent.mkdir(parents=True, exist_ok=True)
+def _create_symlink(source: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
         for file in [f for f in source.rglob("*") if f.is_file()]:
-            target = dist / file.relative_to(source)
+            target = dest / file.relative_to(source)
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.is_symlink() or target.exists():
                 target.unlink()
             print(f"Linking '{file}' -> '{target}'")
             target.symlink_to(file)
     else:
-        if dist.is_symlink():
-            dist.unlink()
-        print(f"Linking '{dist}' -> '{source}'...")
-        dist.symlink_to(source)
+        if dest.is_symlink():
+            dest.unlink()
+        print(f"Linking '{dest}' -> '{source}'...")
+        dest.symlink_to(source)
 
 
 def _create_script(name: str, command: str, env: dict[str, str | int] | None = None) -> Path:
@@ -88,7 +88,7 @@ def _build(pkg: Package) -> None:
 
 def _link_bin(pkg: Package) -> None:
     for name, path in (pkg.bin or {}).items():
-        dist_path = config.bin_dir / name
+        dest_path = config.bin_dir / name
         bin_path = Path()
 
         if ":" in path:
@@ -100,7 +100,7 @@ def _link_bin(pkg: Package) -> None:
                 "gem": lambda target: _create_script(
                     name,
                     str(installers.gem.bin_path(target).absolute()),
-                    {"GEM_PATH": f"{pkg.dir}{':$GEM_PATH' if platform.system() != 'Windows' else ';%%GEM_PATH%%'}"},
+                    {"GEM_PATH": f"{pkg.dir}{select_by_os(unix=':$GEM_PATH', windows=';%%GEM_PATH%%')}"},
                 ),
                 "golang": installers.golang.bin_path,
                 "luarocks": installers.luarocks.bin_path,
@@ -119,17 +119,17 @@ def _link_bin(pkg: Package) -> None:
         else:
             bin_path = pkg.dir / path
 
-        _create_symlink(bin_path, dist_path)
+        _create_symlink(bin_path, dest_path)
 
-        if platform.system() != "Windows":
+        if os.name == "posix":
             bin_path.chmod(bin_path.stat().st_mode | 0o111)
 
 
 def _link_share(pkg: Package) -> None:
-    for dist, path in (pkg.share or {}).items():
-        dist_path = config.share_dir / dist
+    for dest, path in (pkg.share or {}).items():
+        dest_path = config.share_dir / dest
         share_path = pkg.dir / path
-        _create_symlink(share_path, dist_path)
+        _create_symlink(share_path, dest_path)
 
 
 def install(args: Any) -> None:

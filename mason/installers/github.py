@@ -24,14 +24,14 @@ def install(pkg: Package) -> None:
             asset_path = Path(f)
             out_path = Path(".")
             match f.split(":", 1):
-                case [ref, dist] if dist.endswith("/"):
-                    out_path = Path(dist)
+                case [source, dest] if dest.endswith("/"):
+                    out_path = Path(dest)
                     out_path.mkdir(parents=True, exist_ok=True)
-                    download_release(repo, ref, pkg.purl.version, out_path)
-                    asset_path = out_path / ref
-                case [ref, dist]:
-                    download_release(repo, ref, pkg.purl.version)
-                    asset_path = Path(ref).replace(dist)
+                    download_release(repo, source, pkg.purl.version, out_path)
+                    asset_path = out_path / source
+                case [source, dest]:
+                    download_release(repo, source, pkg.purl.version)
+                    asset_path = Path(source).replace(dest)
                 case _:
                     download_release(repo, f, pkg.purl.version)
             if is_extractable(asset_path):
