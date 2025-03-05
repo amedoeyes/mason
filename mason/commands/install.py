@@ -51,91 +51,6 @@ def _create_script(name: str, command: str, env: dict[str, str | int] | None = N
     return path
 
 
-def _install(pkg: Package) -> None:
-    installer_map = {
-        "cargo": installers.cargo.install,
-        "composer": installers.composer.install,
-        "gem": installers.gem.install,
-        "generic": installers.generic.install,
-        "github": installers.github.install,
-        "golang": installers.golang.install,
-        "luarocks": installers.luarocks.install,
-        "npm": installers.npm.install,
-        "nuget": installers.nuget.install,
-        "opam": installers.opam.install,
-        "openvsx": installers.openvsx.install,
-        "pypi": installers.pypi.install,
-    }
-
-    if pkg.purl.type not in installer_map:
-        raise Exception(f"Installer for '{pkg.purl.type}' is not implemented")
-
-    print(f"Installing '{pkg.purl.type}' package '{pkg.purl.name}@{pkg.purl.version}'...")
-    installer_map[pkg.purl.type](pkg)
-
-
-def _build(pkg: Package) -> None:
-    if pkg.build:
-        print(f"Building '{pkg.name}'...")
-        for cmd in pkg.build.cmds:
-            print(f"Running '{cmd}'")
-            subprocess.run(cmd, check=True, env={**os.environ, **pkg.build.env}, shell=True)
-
-
-def _link_bin(pkg: Package) -> None:
-    for name, path in (pkg.bin or {}).items():
-        dest_path = config.bin_dir / name
-        bin_path = Path()
-        print(name)
-
-        if ":" in path:
-            resolver_map = {
-                "cargo": installers.cargo.bin_path,
-                "composer": installers.composer.bin_path,
-                "dotnet": lambda target: _create_script(name, f'dotnet "{Path(target).absolute()}"'),
-                "exec": lambda target: _create_script(name, str(Path(target).absolute())),
-                "gem": lambda target: _create_script(
-                    name,
-                    str(installers.gem.bin_path(target).absolute()),
-                    {"GEM_PATH": f"{pkg.dir}{select_by_os(unix=':$GEM_PATH', windows=';%%GEM_PATH%%')}"},
-                ),
-                "golang": installers.golang.bin_path,
-                "java-jar": lambda target: _create_script(name, f'java -jar "{pkg.dir / target}"'),
-                "luarocks": installers.luarocks.bin_path,
-                "node": lambda target: _create_script(name, f'node "{pkg.dir / target}"'),
-                "npm": installers.npm.bin_path,
-                "nuget": installers.nuget.bin_path,
-                "opam": installers.opam.bin_path,
-                "php": lambda target: _create_script(name, f'php "{pkg.dir / target}"'),
-                "pypi": installers.pypi.bin_path,
-                "python": lambda target: _create_script(
-                    name, f'{select_by_os(unix="python3", windows="python")} "{pkg.dir / target}"'
-                ),
-                "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
-                "ruby": lambda target: _create_script(name, f'ruby "{pkg.dir / target}"'),
-            }
-
-            type, target = path.split(":")
-            if type not in resolver_map:
-                raise Exception(f"Resolver for '{type}' is not implemented")
-
-            bin_path = pkg.dir / resolver_map[type](target)
-        else:
-            bin_path = pkg.dir / path
-
-        _create_symlink(bin_path, dest_path)
-
-        if os.name == "posix":
-            bin_path.chmod(bin_path.stat().st_mode | 0o111)
-
-
-def _link_share(pkg: Package) -> None:
-    for dest, path in (pkg.share or {}).items():
-        dest_path = config.share_dir / dest
-        share_path = pkg.dir / path
-        _create_symlink(share_path, dest_path)
-
-
 def install(args: Any) -> None:
     packages = json.loads(config.registry_path.read_bytes())
 
@@ -152,6 +67,97 @@ def install(args: Any) -> None:
         os.chdir(pkg.dir)
         os.environ["PWD"] = os.getcwd()
 
+        installer_map = {
+            "cargo": installers.cargo.install,
+            "composer": installers.composer.install,
+            "gem": installers.gem.install,
+            "generic": installers.generic.install,
+            "github": installers.github.install,
+            "golang": installers.golang.install,
+            "luarocks": installers.luarocks.install,
+            "npm": installers.npm.install,
+            "nuget": installers.nuget.install,
+            "opam": installers.opam.install,
+            "openvsx": installers.openvsx.install,
+            "pypi": installers.pypi.install,
+        }
+
+        if pkg.purl.type not in installer_map:
+            raise Exception(f"Installer for '{pkg.purl.type}' is not implemented")
+
+        print(f"Installing '{pkg.purl.type}' package '{pkg.purl.name}@{pkg.purl.version}'...")
+        installer_map[pkg.purl.type](pkg)
+
+        if pkg.build:
+            print(f"Building '{pkg.name}'...")
+            for cmd in pkg.build.cmds:
+                print(f"Running '{cmd}'")
+                subprocess.run(cmd, check=True, env={**os.environ, **pkg.build.env}, shell=True)
+
+        for name, path in (pkg.bin or {}).items():
+            dest_path = config.bin_dir / name
+            bin_path = Path()
+
+            if ":" in path:
+                type, target = path.split(":")
+                match type:
+                    case "cargo":
+                        bin_path = Path("bin") / select_by_os(unix=target, windows=f"{target}.exe")
+                    case "composer":
+                        bin_path = Path("bin") / "vendor" / select_by_os(unix=target, windows=f"{target}.bat")
+                    case "dotnet":
+                        bin_path = _create_script(name, f'dotnet "{Path(target).absolute()}"')
+                    case "exec":
+                        bin_path = _create_script(name, str(Path(target).absolute()))
+                    case "gem":
+                        bin_path = _create_script(
+                            name,
+                            str(pkg.dir / "bin" / select_by_os(unix=target, windows=f"{target}.bat")),
+                            {"GEM_PATH": f"{pkg.dir}{select_by_os(unix=':$GEM_PATH', windows=';%%GEM_PATH%%')}"},
+                        )
+                    case "golang":
+                        bin_path = Path(select_by_os(unix=target, windows=f"{target}.exe"))
+                    case "java-jar":
+                        bin_path = _create_script(name, f'java -jar "{pkg.dir / target}"')
+                    case "luarocks":
+                        bin_path = Path("bin") / select_by_os(unix=target, windows=f"{target}.bat")
+                    case "node":
+                        bin_path = _create_script(name, f'node "{pkg.dir / target}"')
+                    case "npm":
+                        bin_path = Path("node_modules") / ".bin" / select_by_os(unix=target, windows=f"{target}.cmd")
+                    case "nuget":
+                        bin_path = select_by_os(unix=target, windows=f"{target}.exe")
+                    case "opam":
+                        bin_path = Path("bin") / select_by_os(unix=target, windows=f"{target}.exe")
+                    case "php":
+                        bin_path = _create_script(name, f'php "{pkg.dir / target}"')
+                    case "pypi":
+                        bin_path = Path("venv") / select_by_os(
+                            unix=Path("bin") / target,
+                            windows=Path("Scripts") / f"{target}.exe",
+                        )
+                    case "python":
+                        bin_path = _create_script(
+                            name,
+                            f'{select_by_os(unix="python3", windows="python")} "{pkg.dir / target}"',
+                        )
+                    case "pyvenv":
+                        bin_path = _create_script(name, f"{pkg.dir / 'venv/bin/python'} -m {target}")
+                    case "ruby":
+                        bin_path = _create_script(name, f'ruby "{pkg.dir / target}"')
+                    case _:
+                        raise Exception(f"Resolver for '{type}' is not implemented")
+                bin_path = pkg.dir / bin_path
+            else:
+                bin_path = pkg.dir / path
+
+            _create_symlink(bin_path, dest_path)
+
+            if os.name == "posix":
+                bin_path.chmod(bin_path.stat().st_mode | 0o111)
+
+        for dest, path in (pkg.share or {}).items():
+            _create_symlink(pkg.dir / path, config.share_dir / dest)
 
         for dest, path in (pkg.opt or {}).items():
             _create_symlink(pkg.dir / path, config.opt_dir / dest)

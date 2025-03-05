@@ -27,7 +27,3 @@ def install(pkg: Package) -> None:
         ],
         check=True,
     )
-
-
-def bin_path(target: str) -> Path:
-    return Path("venv") / select_by_os(unix=Path("bin") / target, windows=Path("Scripts") / f"{target}.exe")

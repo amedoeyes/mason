@@ -17,7 +17,3 @@ def install(pkg: Package) -> None:
         env={**os.environ, "GOBIN": os.getcwd()},
         check=True,
     )
-
-
-def bin_path(target: str) -> Path:
-    return Path(select_by_os(unix=target, windows=f"{target}.exe"))

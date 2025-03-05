@@ -21,7 +21,3 @@ def install(pkg: Package) -> None:
         env={"GEM_HOME": os.getcwd()},
         check=True,
     )
-
-
-def bin_path(target: str) -> Path:
-    return Path("bin") / select_by_os(unix=target, windows=f"{target}.bat")

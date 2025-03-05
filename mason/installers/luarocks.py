@@ -15,7 +15,3 @@ def install(pkg: Package) -> None:
             cmd.append("--dev")
     cmd += [pkg.purl.name, pkg.purl.version]
     subprocess.run(cmd, check=True)
-
-
-def bin_path(target: str) -> Path:
-    return Path("bin") / select_by_os(unix=target, windows=f"{target}.bat")

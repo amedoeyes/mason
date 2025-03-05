@@ -17,7 +17,3 @@ def install(pkg: Package) -> None:
         ],
         check=True,
     )
-
-
-def bin_path(target: str) -> Path:
-    return Path("bin") / select_by_os(unix=target, windows=f"{target}.exe")
