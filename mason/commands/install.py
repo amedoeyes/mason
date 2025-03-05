@@ -100,6 +100,7 @@ def _link_bin(pkg: Package) -> None:
                     {"GEM_PATH": f"{pkg.dir}{select_by_os(unix=':$GEM_PATH', windows=';%%GEM_PATH%%')}"},
                 ),
                 "golang": installers.golang.bin_path,
+                "java-jar": lambda target: _create_script(name, f"java -jar {pkg.dir / target}"),
                 "luarocks": installers.luarocks.bin_path,
                 "node": lambda target: _create_script(name, f"node {pkg.dir / target}"),
                 "npm": installers.npm.bin_path,
