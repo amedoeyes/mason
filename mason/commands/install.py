@@ -92,7 +92,7 @@ def _link_bin(pkg: Package) -> None:
             resolver_map = {
                 "cargo": installers.cargo.bin_path,
                 "composer": installers.composer.bin_path,
-                "dotnet": lambda target: _create_script(name, f"dotnet {Path(target).absolute()}"),
+                "dotnet": lambda target: _create_script(name, f'dotnet "{Path(target).absolute()}"'),
                 "exec": lambda target: _create_script(name, str(Path(target).absolute())),
                 "gem": lambda target: _create_script(
                     name,
@@ -100,19 +100,19 @@ def _link_bin(pkg: Package) -> None:
                     {"GEM_PATH": f"{pkg.dir}{select_by_os(unix=':$GEM_PATH', windows=';%%GEM_PATH%%')}"},
                 ),
                 "golang": installers.golang.bin_path,
-                "java-jar": lambda target: _create_script(name, f"java -jar {pkg.dir / target}"),
+                "java-jar": lambda target: _create_script(name, f'java -jar "{pkg.dir / target}"'),
                 "luarocks": installers.luarocks.bin_path,
-                "node": lambda target: _create_script(name, f"node {pkg.dir / target}"),
+                "node": lambda target: _create_script(name, f'node "{pkg.dir / target}"'),
                 "npm": installers.npm.bin_path,
                 "nuget": installers.nuget.bin_path,
                 "opam": installers.opam.bin_path,
-                "php": lambda target: _create_script(name, f"php {pkg.dir / target}"),
+                "php": lambda target: _create_script(name, f'php "{pkg.dir / target}"'),
                 "pypi": installers.pypi.bin_path,
                 "python": lambda target: _create_script(
-                    name, f"{select_by_os(unix='python3', windows='python')} {pkg.dir / target}"
+                    name, f'{select_by_os(unix="python3", windows="python")} "{pkg.dir / target}"'
                 ),
                 "pyvenv": lambda target: _create_script(name, f"{Path('venv/bin/python').absolute()} -m {target}"),
-                "ruby": lambda target: _create_script(name, f"ruby {pkg.dir / target}"),
+                "ruby": lambda target: _create_script(name, f'ruby "{pkg.dir / target}"'),
             }
 
             type, target = path.split(":")
