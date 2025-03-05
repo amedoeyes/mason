@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import textwrap
-from typing import Any
+from typing import Any, Optional
 
 from mason import config
 from mason.package import Package
@@ -51,6 +51,10 @@ def _create_script(name: str, command: str, env: dict[str, str | int] | None = N
     return path
 
 
+def _run(cmd: list[str] | str, env: Optional[dict[str, str]] = None, shell: bool = False) -> None:
+    subprocess.run(cmd, env={**os.environ, **(env or {})}, check=True, shell=shell)
+
+
 def install(args: Any) -> None:
     packages = json.loads(config.registry_path.read_bytes())
 
@@ -67,30 +71,35 @@ def install(args: Any) -> None:
         os.chdir(pkg.dir)
         os.environ["PWD"] = os.getcwd()
 
-        print(f"Installing '{pkg.purl.type}' package '{pkg.purl.name}@{pkg.purl.version}'...")
-        match pkg.purl.type:
+        type = pkg.purl.type
+        namespace = pkg.purl.namespace
+        name = pkg.purl.name
+        version = pkg.purl.version
+        qualifiers = pkg.purl.qualifiers
+        subpath = pkg.purl.subpath
+
+        print(f"Installing '{type}' package '{name}@{version}'...")
+
+        match type:
             case "cargo":
                 cmd = ["cargo", "install", "--root", "."]
-                if pkg.purl.qualifiers:
-                    if repo_url := pkg.purl.qualifiers.get("repository_url"):
+                if qualifiers:
+                    if repo_url := qualifiers.get("repository_url"):
                         cmd += ["--git", repo_url]
-                        cmd += ["--rev" if pkg.purl.qualifiers.get("rev") == "true" else "--tag", pkg.purl.version]
+                        cmd += ["--rev" if qualifiers.get("rev") == "true" else "--tag", version]
                     else:
-                        cmd += ["--version", pkg.purl.version]
-                    if features := pkg.purl.qualifiers.get("features"):
+                        cmd += ["--version", version]
+                    if features := qualifiers.get("features"):
                         cmd += ["--features", features]
-                    if pkg.purl.qualifiers.get("locked") == "true":
+                    if qualifiers.get("locked") == "true":
                         cmd.append("--locked")
-                cmd.append(pkg.purl.name)
-                subprocess.run(cmd, check=True)
+                cmd.append(name)
+                _run(cmd)
             case "composer":
-                subprocess.run(["composer", "init", "--no-interaction", "--stability=stable"], check=True)
-                subprocess.run(
-                    ["composer", "require", f"{pkg.purl.namespace}/{pkg.purl.name}:{pkg.purl.version}"],
-                    check=True,
-                )
+                _run(["composer", "init", "--no-interaction", "--stability=stable"])
+                _run(["composer", "require", f"{namespace}/{name}:{version}"])
             case "gem":
-                subprocess.run(
+                _run(
                     [
                         "gem",
                         "install",
@@ -99,10 +108,9 @@ def install(args: Any) -> None:
                         "--install-dir=.",
                         "--bindir=bin",
                         "--no-document",
-                        f"{pkg.purl.name}:{pkg.purl.version}",
+                        f"{name}:{version}",
                     ],
-                    env={"GEM_HOME": os.getcwd()},
-                    check=True,
+                    {"GEM_HOME": os.getcwd()},
                 )
             case "generic":
                 for name, url in (pkg.files if isinstance(pkg.files, dict) else {}).items():
@@ -111,7 +119,7 @@ def install(args: Any) -> None:
                     if is_extractable(out_path):
                         extract_file(out_path)
             case "github":
-                repo = f"{pkg.purl.namespace}/{pkg.purl.name}"
+                repo = f"{namespace}/{name}"
                 if pkg.files:
                     for f in pkg.files:
                         asset_path = Path(f)
@@ -120,105 +128,56 @@ def install(args: Any) -> None:
                             case [source, dest] if dest.endswith("/"):
                                 out_path = Path(dest)
                                 out_path.mkdir(parents=True, exist_ok=True)
-                                download_github_release(repo, source, pkg.purl.version, out_path)
+                                download_github_release(repo, source, version, out_path)
                                 asset_path = out_path / source
                             case [source, dest]:
-                                download_github_release(repo, source, pkg.purl.version)
+                                download_github_release(repo, source, version)
                                 asset_path = Path(source).replace(dest)
                             case _:
-                                download_github_release(repo, f, pkg.purl.version)
+                                download_github_release(repo, f, version)
                         if is_extractable(asset_path):
                             extract_file(asset_path, out_path)
                 else:
                     if (pkg.dir / ".git").exists():
-                        subprocess.run(["git", "fetch", "--depth=1", "--tags", "origin", pkg.purl.version], check=True)
-                        subprocess.run(["git", "reset", "--hard", pkg.purl.version], check=True)
+                        _run(["git", "fetch", "--depth=1", "--tags", "origin", version])
+                        _run(["git", "reset", "--hard", version])
                     else:
-                        subprocess.run(
-                            [
-                                "git",
-                                "clone",
-                                "--depth=1",
-                                f"https://github.com/{repo}.git",
-                                "--branch",
-                                pkg.purl.version,
-                                ".",
-                            ],
-                            check=True,
-                        )
+                        _run(["git", "clone", "--depth=1", f"https://github.com/{repo}.git", "--branch", version, "."])
             case "golang":
-                subprocess.run(
-                    [
-                        "go",
-                        "install",
-                        "-v",
-                        f"{pkg.purl.namespace}/{pkg.purl.name}{f'/{pkg.purl.subpath}' if pkg.purl.subpath else ''}@{pkg.purl.version}",
-                    ],
-                    env={**os.environ, "GOBIN": os.getcwd()},
-                    check=True,
+                _run(
+                    ["go", "install", "-v", f"{namespace}/{name}{f'/{subpath}' if subpath else ''}@{version}"],
+                    {**os.environ, "GOBIN": os.getcwd()},
                 )
             case "luarocks":
                 cmd = ["luarocks", "install", "--tree", os.getcwd()]
-                if pkg.purl.qualifiers:
-                    if repo_url := pkg.purl.qualifiers.get("repository_url"):
+                if qualifiers:
+                    if repo_url := qualifiers.get("repository_url"):
                         cmd += ["--server", repo_url]
-                    if pkg.purl.qualifiers.get("dev") == "true":
+                    if qualifiers.get("dev") == "true":
                         cmd.append("--dev")
-                cmd += [pkg.purl.name, pkg.purl.version]
-                subprocess.run(cmd, check=True)
+                cmd += [name, version]
+                _run(cmd)
             case "npm":
                 Path(".npmrc").write_text("install-strategy=shallow")
-                subprocess.run(["npm", "init", "--yes", "--scope=mason"])
-                subprocess.run(
-                    ["npm", "install", f"{pkg.purl.name}@{pkg.purl.version}", *pkg.extra_packages],
-                    check=True,
-                )
+                _run(["npm", "init", "--yes", "--scope=mason"])
+                _run(["npm", "install", f"{name}@{version}", *pkg.extra_packages])
             case "nuget":
-                subprocess.run(
-                    [
-                        "dotnet",
-                        "tool",
-                        "update",
-                        "--tool-path",
-                        ".",
-                        "--version",
-                        pkg.purl.version,
-                        pkg.purl.name,
-                    ],
-                    check=True,
-                )
+                _run(["dotnet", "tool", "update", "--tool-path", ".", "--version", version, name])
             case "opam":
-                subprocess.run(
-                    [
-                        "opam",
-                        "install",
-                        "--destdir=.",
-                        "--yes",
-                        "--verbose",
-                        f"{pkg.purl.name}.{pkg.purl.version}",
-                    ],
-                    check=True,
-                )
+                _run(["opam", "install", "--destdir=.", "--yes", "--verbose", f"{name}.{version}"])
             case "openvsx":
                 for file in pkg.files or []:
                     out_path = Path(file)
                     download_file(
-                        f"https://open-vsx.org/api/{pkg.purl.namespace}/{pkg.purl.name}/{pkg.purl.version}/file/{file}",
+                        f"https://open-vsx.org/api/{namespace}/{name}/{version}/file/{file}",
                         out_path,
                     )
                     extract_file(out_path)
             case "pypi":
-                subprocess.run(
-                    [
-                        select_by_os(unix="python3", windows="python"),
-                        "-m",
-                        "venv",
-                        "venv",
-                        "--system-site-packages",
-                    ],
-                    check=True,
+                _run(
+                    [select_by_os(unix="python3", windows="python"), "-m", "venv", "venv", "--system-site-packages"],
                 )
-                subprocess.run(
+                _run(
                     [
                         select_by_os(
                             unix=Path("venv") / "bin" / "python",
@@ -230,19 +189,18 @@ def install(args: Any) -> None:
                         "install",
                         "--ignore-installed",
                         "-U",
-                        f"{pkg.purl.name}{f'[{pkg.purl.qualifiers["extra"]}]' if 'extra' in pkg.purl.qualifiers else ''}=={pkg.purl.version}",
+                        f"{name}{f'[{qualifiers["extra"]}]' if 'extra' in qualifiers else ''}=={version}",
                         *pkg.extra_packages,
                     ],
-                    check=True,
                 )
             case _:
-                raise Exception(f"Installer for '{pkg.purl.type}' is not implemented")
+                raise Exception(f"Installer for '{type}' is not implemented")
 
         if pkg.build:
             print(f"Building '{pkg.name}'...")
             for cmd in pkg.build.cmds:
                 print(f"Running '{cmd}'")
-                subprocess.run(cmd, check=True, env={**os.environ, **pkg.build.env}, shell=True)
+                _run(cmd, env={**os.environ, **pkg.build.env}, shell=True)
 
         for name, path in (pkg.bin or {}).items():
             dest_path = config.bin_dir / name
