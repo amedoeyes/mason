@@ -104,6 +104,7 @@ def _link_bin(pkg: Package) -> None:
                 "npm": installers.npm.bin_path,
                 "nuget": installers.nuget.bin_path,
                 "opam": installers.opam.bin_path,
+                "php": lambda target: _create_script(name, f"php {pkg.dir / target}"),
                 "pypi": installers.pypi.bin_path,
                 "python": lambda target: _create_script(
                     name, f"{select_by_os(unix='python3', windows='python')} {pkg.dir / target}"
