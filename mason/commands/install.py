@@ -160,7 +160,7 @@ def install(args: Any) -> None:
             case "npm":
                 Path(".npmrc").write_text("install-strategy=shallow")
                 _run(["npm", "init", "--yes", "--scope=mason"])
-                _run(["npm", "install", f"{name}@{version}", *pkg.extra_packages])
+                _run(["npm", "install", f"{f'{namespace}/' if namespace else ''}{name}@{version}", *pkg.extra_packages])
             case "nuget":
                 _run(["dotnet", "tool", "update", "--tool-path", ".", "--version", version, name])
             case "opam":
