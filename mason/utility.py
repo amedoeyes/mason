@@ -59,7 +59,7 @@ def download_file(url: str, out_path: Path) -> None:
 def download_github_release(repo: str, asset: str, version="latest", out_path=Path(".")) -> None:
     download_file(
         (
-            f"https://github.com/{repo}/releases/latest/download{asset}"
+            f"https://github.com/{repo}/releases/latest/download/{asset}"
             if version == "latest"
             else f"https://github.com/{repo}/releases/download/{version}/{asset}"
         ),
