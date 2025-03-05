@@ -18,11 +18,11 @@ def download_release(repo: str, asset: str, version="latest", out_path=Path(".")
 
 
 def install(pkg: Package) -> None:
+    repo = f"{pkg.purl.namespace}/{pkg.purl.name}"
     if pkg.files:
         for f in pkg.files:
             asset_path = Path(f)
             dist_path = Path(".")
-            repo = f"{pkg.purl.namespace}/{pkg.purl.name}"
             match f.split(":", 1):
                 case [ref, dist] if dist.endswith("/"):
                     dist_path = Path(dist)
@@ -42,14 +42,6 @@ def install(pkg: Package) -> None:
             subprocess.run(["git", "reset", "--hard", pkg.purl.version], check=True)
         else:
             subprocess.run(
-                [
-                    "git",
-                    "clone",
-                    "--depth=1",
-                    f"https://github.com/{pkg.purl.name}.git",
-                    "--branch",
-                    pkg.purl.version,
-                    ".",
-                ],
+                ["git", "clone", "--depth=1", f"https://github.com/{repo}.git", "--branch", pkg.purl.version, "."],
                 check=True,
             )
