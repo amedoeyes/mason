@@ -40,7 +40,7 @@ def _create_script(name: str, command: str, env: dict[str, str | int] | None = N
         {} %*
     """)
 
-    path = Path(select_by_os(unix="name", windows=f"{name}.cmd"))
+    path = Path(select_by_os(unix=name, windows=f"{name}.cmd"))
     path.write_text(
         select_by_os(unix=bash, windows=batch).format(
             "\n".join([f"{select_by_os(unix='export', windows='SET')} {k}={v}" for k, v in env.items()]),
