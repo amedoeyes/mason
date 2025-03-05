@@ -18,8 +18,8 @@ def _verify_checksums(checksum_file: Path) -> bool:
 
 def download() -> None:
     print("Downloading registry...")
-    download_github_release(config.registry_repo, "checksums.txt", "latest", config.cache_dir)
-    download_github_release(config.registry_repo, "registry.json.zip", "latest", config.cache_dir)
+    download_github_release(config.registry_repo, "checksums.txt", out_path=config.cache_dir)
+    download_github_release(config.registry_repo, "registry.json.zip", out_path=config.cache_dir)
     extract_file(config.cache_dir / "registry.json.zip", config.cache_dir)
 
 
