@@ -200,9 +200,8 @@ def install(args: Any) -> None:
 
         if pkg.build:
             print(f"Building '{pkg.name}'...")
-            for cmd in pkg.build.cmds:
-                print(f"Running '{cmd}'")
-                _run(cmd, env={**os.environ, **pkg.build.env}, shell=True)
+            print(f"Running '{' && '.join(pkg.build.cmds)}'")
+            _run(" && ".join(pkg.build.cmds), env={**os.environ, **pkg.build.env}, shell=True)
 
         for name, path in (pkg.bin or {}).items():
             dest_path = config.bin_dir / name
