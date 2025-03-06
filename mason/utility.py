@@ -19,6 +19,9 @@ def extract_file(file_path: Path, out_path=Path(".")) -> None:
         case [".tar", ".bz2"] | [_, ".tbz2"] | [".tbz2"]:
             with tarfile.open(file_path, "r:bz2") as tar:
                 tar.extractall(path=out_path, filter="data")
+        case [".tar", ".xz"] | [_, ".txz"] | [".txz"]:
+            with tarfile.open(file_path, "r:xz") as tar:
+                tar.extractall(path=out_path, filter="data")
         case [_, ".tar"] | [".tar"]:
             with tarfile.open(file_path, "r:") as tar:
                 tar.extractall(path=out_path, filter="data")
@@ -33,16 +36,21 @@ def extract_file(file_path: Path, out_path=Path(".")) -> None:
 
 
 def is_extractable(file_path: Path) -> bool:
-    return file_path.suffixes[-2:] in (
-        [".tar", ".gz"],
-        [".tar", ".bz2"],
-    ) or file_path.suffix in [
-        ".tgz",
-        ".tar",
-        ".gz",
-        ".zip",
-        ".vsix",
-    ]
+    match file_path.suffixes[-2:]:
+        case [".tar", ".gz"] | [_, ".tgz"] | [".tgz"]:
+            return True
+        case [".tar", ".bz2"] | [_, ".tbz2"] | [".tbz2"]:
+            return True
+        case [".tar", ".xz"] | [_, ".txz"] | [".txz"]:
+            return True
+        case [_, ".tar"] | [".tar"]:
+            return True
+        case [_, ".gz"] | [".gz"]:
+            return True
+        case [_, ".zip"] | [".zip"] | [_, ".vsix"] | [".vsix"]:
+            return True
+        case _:
+            return False
 
 
 def download_file(url: str, out_path: Path) -> None:
