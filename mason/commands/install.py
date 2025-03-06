@@ -78,7 +78,7 @@ def install(args: Any) -> None:
         qualifiers = pkg.purl.qualifiers
         subpath = pkg.purl.subpath
 
-        print(f"Installing '{type}' package '{name}@{version}'...")
+        print(f"Installing '{type}' package '{f'{namespace}/' if namespace else ''}{name}@{version}'...")
 
         match type:
             case "cargo":
