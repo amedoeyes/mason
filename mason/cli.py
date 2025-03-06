@@ -11,7 +11,14 @@ from mason import commands, config, registry
 
 def main():
     try:
-        for dir in [config.cache_dir, config.data_dir, config.bin_dir, config.share_dir, config.packages_dir]:
+        for dir in [
+            config.data_dir,
+            config.registries_dir,
+            config.packages_dir,
+            config.bin_dir,
+            config.share_dir,
+            config.opt_dir,
+        ]:
             dir.mkdir(parents=True, exist_ok=True)
 
         if not config.registry_path.exists():
