@@ -61,60 +61,6 @@ class Build:
         self.env = data.get("env", {})
 
 
-@dataclass
-class Purl:
-    scheme: str
-    type: str
-    namespace: str
-    name: str
-    version: str
-    qualifiers: dict
-    subpath: str
-
-    def __init__(self, purl: str) -> None:
-        self.scheme = ""
-        self.type = ""
-        self.namespace = ""
-        self.name = ""
-        self.version = ""
-        self.qualifiers = {}
-        self.subpath = ""
-
-        if "#" in purl:
-            purl, subpath = purl.rsplit("#", 1)
-            self.subpath = "/".join([unquote(p) for p in subpath.strip("/").split("/") if p not in ["", ".", ".."]])
-
-        if "?" in purl:
-            purl, qualifiers_str = purl.rsplit("?", 1)
-            self.qualifiers = {
-                k.lower(): unquote(v).split(",") if k == "checksums" else unquote(v)
-                for k, v in (p.split("=", 1) for p in qualifiers_str.split("&"))
-                if v
-            }
-
-        if ":" in purl:
-            scheme, purl = purl.split(":", 1)
-            self.scheme = scheme.lower()
-
-        purl = purl.strip("/")
-        if "/" in purl:
-            type, purl = purl.split("/", 1)
-            self.type = type.lower()
-
-        if "@" in purl:
-            purl, version = purl.rsplit("@", 1)
-            self.version = unquote(version)
-
-        if "/" in purl:
-            purl, name = purl.rsplit("/", 1)
-            self.name = unquote(name)
-        else:
-            self.name = unquote(purl)
-            purl = ""
-
-        self.namespace = "/".join([unquote(p) for p in purl.split("/") if p != ""])
-
-
 @dataclass()
 class Package:
     name: str
