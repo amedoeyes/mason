@@ -1,5 +1,4 @@
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -61,3 +60,5 @@ def main():
 
     except Exception as e:
         print(f"{Path(sys.argv[0]).name}: {e}")
+    except KeyboardInterrupt:
+        pass
