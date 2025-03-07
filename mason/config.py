@@ -17,3 +17,7 @@ opt_dir = data_dir / "opt"
 
 registry_repo = os.getenv("MASON_REGISTRY_REPO", "mason-org/mason-registry")
 registry_path = registries_dir / "github" / registry_repo / "registry.json"
+
+registries = [
+    r.strip() for r in os.getenv("MASON_REGISTRIES", "github:mason-org/mason-registry").split(",") if r.strip()
+]

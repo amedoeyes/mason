@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -6,7 +5,7 @@ import textwrap
 from typing import Any, Optional
 
 from mason import config
-from mason.package import Package
+from mason.context import Context
 from mason.utility import download_file, download_github_release, extract_file, is_extractable, select_by_os
 
 
@@ -55,15 +54,14 @@ def _run(cmd: list[str] | str, env: Optional[dict[str, str]] = None, shell: bool
     subprocess.run(cmd, env={**os.environ, **(env or {})}, check=True, shell=shell)
 
 
-def install(args: Any) -> None:
-    packages = json.loads(config.registry_path.read_bytes())
+def install(args: Any, ctx: Context) -> None:
+    if args.update_registries:
+        ctx.update_registries()
 
     for name in args.package:
-        pkg = next((p for p in packages if p["name"] == name), None)
+        pkg = ctx.package(name)
         if not pkg:
             raise Exception(f"Package '{name}' not found")
-
-        pkg = Package(pkg)
         if pkg.deprecation:
             raise Exception(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
 

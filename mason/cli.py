@@ -6,7 +6,8 @@ from pathlib import Path
 import argcomplete
 from argcomplete.completers import ChoicesCompleter
 
-from mason import commands, config, registry
+from mason import commands, config
+from mason.context import Context
 
 
 def main():
@@ -21,8 +22,7 @@ def main():
         ]:
             dir.mkdir(parents=True, exist_ok=True)
 
-        if not config.registry_path.exists():
-            registry.download()
+        ctx = Context()
 
         def formatter(prog):
             return argparse.HelpFormatter(prog, width=80, max_help_position=1000)
@@ -32,14 +32,13 @@ def main():
 
         subparsers = parser.add_subparsers()
 
-        parser_install = subparsers.add_parser("install", help="install a specific package", formatter_class=formatter)
-        parser_install.set_defaults(func=commands.install)
-        parser_install.add_argument("package", nargs="+").completer = ChoicesCompleter(
-            [pkg["name"] for pkg in json.loads(config.registry_path.read_bytes())]
-        )
+        parser_install = subparsers.add_parser("install", help="install packages", formatter_class=formatter)
+        parser_install.set_defaults(func=lambda args: commands.install(args, ctx))
+        parser_install.add_argument("-u", "--update-registries", action="store_true", help="update registries")
+        parser_install.add_argument("package", nargs="+").completer = ChoicesCompleter([pkg for pkg in ctx.packages])
 
-        parser_search = subparsers.add_parser("search", help="search registry", formatter_class=formatter)
-        parser_search.set_defaults(func=commands.search)
+        parser_search = subparsers.add_parser("search", help="search packages", formatter_class=formatter)
+        parser_search.set_defaults(func=lambda args: commands.search(args, ctx))
         parser_search.add_argument("query", nargs="?", default="")
         parser_search.add_argument(
             "-c",
@@ -50,8 +49,6 @@ def main():
         )
         parser_search.add_argument("-l", "--language", metavar="language", help="specify language for search")
 
-        parser.add_argument("-u", "--update-registry", action="store_true", help="update mason registry")
-
         argcomplete.autocomplete(parser)
 
         if len(sys.argv) == 1:
@@ -59,9 +56,6 @@ def main():
             sys.exit(1)
 
         args = parser.parse_args()
-
-        if args.update_registry:
-            registry.update()
 
         args.func(args)
 
