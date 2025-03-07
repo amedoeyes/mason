@@ -214,6 +214,7 @@ class Package:
             self._build()
             self._write_wrapper_script()
             self._link()
+            self._write_receipt()
             os.chdir(prev_dir)
         except:
             shutil.rmtree(self.dir, ignore_errors=True)
@@ -419,3 +420,18 @@ class Package:
 
         for dest, source in self.opt.items():
             _create_symlink(self.dir / source, config.opt_dir / dest)
+
+    def _write_receipt(self) -> None:
+        (self.dir / "mason-receipt.json").write_text(
+            json.dumps(
+                {
+                    "name": self.name,
+                    "primary_source": {"id": self.purl.purl},
+                    "links": {
+                        "bin": {str(b.dest): str(b.source) for b in self.bin},
+                        "share": self.share,
+                        "opt": self.opt,
+                    },
+                }
+            )
+        )
