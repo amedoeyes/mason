@@ -5,14 +5,19 @@ from mason.package import Package
 
 
 def search(args: Any, ctx: Context) -> None:
-    def match(pkg):
+    def match(package: Package):
         return (
-            (not args.category or any(args.category.casefold() == c.casefold() for c in pkg["categories"]))
-            and (not args.language or any(args.language.casefold() == l.casefold() for l in pkg["languages"]))
-            and (args.query in pkg["name"] or args.query in pkg["description"])
+            (not args.category or any(args.category.casefold() == c.casefold() for c in package.categories))
+            and (
+                not args.language
+                or (package.languages and any(args.language.casefold() == l.casefold() for l in package.languages))
+            )
+            and (args.query in package.name or args.query in package.description)
         )
 
-    for pkg in [Package(pkg) for _, pkg in ctx.packages.items() if match(pkg)]:
+    for pkg in ctx.packages:
+        if not match(pkg):
+            continue
         print(f"{pkg.name} {pkg.purl.version}")
         if pkg.deprecation:
             print(f"    Deprecation: {pkg.deprecation}")

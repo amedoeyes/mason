@@ -32,25 +32,7 @@ class Registry:
 
     def __init__(self, registry: str) -> None:
         self.type, self.source = registry.split(":", 1)
-        match self.type:
-            case "github":
-                self.path = config.registries_dir / "github" / self.source
-                if not (self.path / "info.json").exists() or not (self.path / "registry.json").exists():
-                    self.path.mkdir(parents=True, exist_ok=True)
-                    print(f"Downloading registry '{self.source}'...")
-                    self._download_github_registry()
-                self.packages = json.loads((self.path / "registry.json").read_bytes())
-                self.info = json.loads((self.path / "info.json").read_bytes())
-            case "file":
-                self.path = Path(self.source)
-                self.packages = list(
-                    yaml.load_all(
-                        b"".join((file / "package.yaml").read_bytes() for file in (self.path / "packages").iterdir()),
-                        yaml.CSafeLoader,
-                    )
-                )
-            case _:
-                raise Exception(f"Registry type '{self.type}' not implemented")
+        self._load()
 
     def update(self) -> None:
         match self.type:
@@ -59,19 +41,17 @@ class Registry:
                 response.raise_for_status()
                 data = response.json()
                 if data["tag_name"] != self.info["version"]:
-                    print(f"Updating registry '{self.source}'...")
                     self._download_github_registry()
-                else:
-                    print(f"Registry '{self.source}' up-to-date")
+                    self._load()
             case "file":
                 pass
             case _:
                 raise Exception(f"Registry type '{self.type}' not implemented")
 
     def _download_github_registry(self) -> None:
-        download_github_release(self.source, "checksums.txt", out_path=self.path)
         download_github_release(self.source, "registry.json.zip", out_path=self.path)
         extract_file(self.path / "registry.json.zip", self.path)
+        download_github_release(self.source, "checksums.txt", out_path=self.path)
         _verify_checksums(self.path / "checksums.txt")
         response = requests.get(f"https://api.github.com/repos/{self.source}/releases/latest")
         response.raise_for_status()
@@ -86,3 +66,23 @@ class Registry:
         (self.path / "info.json").write_text(json.dumps(self.info, indent=2))
         os.remove(self.path / "registry.json.zip")
         os.remove(self.path / "checksums.txt")
+
+    def _load(self) -> None:
+        match self.type:
+            case "github":
+                self.path = config.registries_dir / "github" / self.source
+                if not (self.path / "info.json").exists() or not (self.path / "registry.json").exists():
+                    self.path.mkdir(parents=True, exist_ok=True)
+                    self._download_github_registry()
+                self.packages = json.loads((self.path / "registry.json").read_bytes())
+                self.info = json.loads((self.path / "info.json").read_bytes())
+            case "file":
+                self.path = Path(self.source)
+                self.packages = list(
+                    yaml.load_all(
+                        b"".join((file / "package.yaml").read_bytes() for file in (self.path / "packages").iterdir()),
+                        yaml.CSafeLoader,
+                    )
+                )
+            case _:
+                raise Exception(f"Registry type '{self.type}' not implemented")
