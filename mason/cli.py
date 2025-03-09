@@ -37,7 +37,7 @@ def main():
         parser_install.add_argument("package", nargs="+").completer = ChoicesCompleter([pkg for pkg in ctx.packages])
 
         parser_list = subparsers.add_parser("list", help="list installed packages", formatter_class=formatter)
-        parser_list.set_defaults(func=lambda _: commands.list())
+        parser_list.set_defaults(func=lambda _: commands.list(ctx))
 
         parser_search = subparsers.add_parser("search", help="search packages", formatter_class=formatter)
         parser_search.set_defaults(func=lambda args: commands.search(args, ctx))

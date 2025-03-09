@@ -1,6 +1,8 @@
+from functools import lru_cache
 import gzip
 import os
 from pathlib import Path
+import platform
 import shutil
 import tarfile
 from typing import Any, Optional
@@ -84,3 +86,23 @@ def download_github_release(repo: str, asset: str, version: Optional[str] = None
 
 def select_by_os(unix: Any, windows: Any) -> Any:
     return windows if os.name == "nt" else unix
+
+
+@lru_cache(maxsize=None)
+def is_platform(targets: tuple[str]) -> bool:
+    @lru_cache(maxsize=1)
+    def current_targets() -> set[str]:
+        system = platform.system().lower()
+        arch = platform.machine().lower()
+        arch_map = {"x86_64": "x64", "amd64": "x64", "i386": "x86", "i686": "x86", "aarch64": "arm64"}
+        system_map = {"windows": "win"}
+        system = system_map.get(system, system)
+        arch = arch_map.get(arch, arch)
+        targets = {system, f"{system}_{arch}"}
+        if system in {"linux", "darwin"}:
+            targets.add("unix")
+        if system == "linux":
+            targets.update({f"{system}_{arch}_gnu", f"{system}_{arch}_musl"})
+        return targets
+
+    return any(t in current_targets() for t in targets)

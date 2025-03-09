@@ -1,9 +1,7 @@
+from __future__ import annotations
 import json
 import os
-import platform
 import re
-from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 import shutil
 import subprocess
@@ -14,28 +12,14 @@ from jinja2 import Environment
 
 from mason import config
 from mason.purl import Purl
-from mason.utility import download_file, download_github_release, extract_file, is_extractable, select_by_os
-
-
-@lru_cache(maxsize=1)
-def _get_current_targets() -> set[str]:
-    system = platform.system().lower()
-    arch = platform.machine().lower()
-    arch_map = {"x86_64": "x64", "amd64": "x64", "i386": "x86", "i686": "x86", "aarch64": "arm64"}
-    system_map = {"windows": "win"}
-    system = system_map.get(system, system)
-    arch = arch_map.get(arch, arch)
-    targets = {system, f"{system}_{arch}"}
-    if system in {"linux", "darwin"}:
-        targets.add("unix")
-    if system == "linux":
-        targets.update({f"{system}_{arch}_gnu", f"{system}_{arch}_musl"})
-    return targets
-
-
-@lru_cache(maxsize=None)
-def _is_platform(targets: tuple[str]) -> bool:
-    return any(t in _get_current_targets() for t in targets)
+from mason.utility import (
+    download_file,
+    download_github_release,
+    extract_file,
+    is_extractable,
+    is_platform,
+    select_by_os,
+)
 
 
 _SCRIPT_TEMPLATE = select_by_os(
@@ -58,7 +42,6 @@ _JINJA_SYNTAX_FIX = [
 ]
 
 
-@dataclass
 class Build:
     cmds: list[str]
     env: dict[str, str]
@@ -71,7 +54,6 @@ class Build:
         subprocess.run(" && ".join(self.cmds), env={**os.environ, **self.env}, check=True, shell=True)
 
 
-@dataclass
 class Bin:
     type: Optional[str]
     source: Path
@@ -137,7 +119,6 @@ class Bin:
             self.source = Path(source)
 
 
-@dataclass()
 class Package:
     name: str
     description: str
@@ -154,6 +135,7 @@ class Package:
     share: dict[str, str]
     opt: dict[str, str]
     dir: Path
+    receipt: Receipt
 
     def __init__(self, data: dict[str, Any]) -> None:
         self.name = data["name"]
@@ -171,14 +153,14 @@ class Package:
             for item in items if (items := data["source"].get(field)) and isinstance(items, list) else []:
                 targets = item.get("target")
                 targets = [targets] if isinstance(targets, str) else targets
-                if _is_platform(tuple(targets)):
+                if is_platform(tuple(targets)):
                     data["source"][field] = item
                     break
 
         env = Environment()
         env.filters["take_if_not"] = lambda value, cond: value if not cond else None
         env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
-        env.globals["is_platform"] = _is_platform
+        env.globals["is_platform"] = is_platform
         env.globals["version"] = self.purl.version
         env.globals.update(data)
 
@@ -203,6 +185,7 @@ class Package:
         self.bin = [Bin(s, d) for d, s in data.get("bin", {}).items()]
         self.share = data.get("share", {})
         self.opt = data.get("opt", {})
+        self.receipt = Receipt(self)
 
     def install(self) -> None:
         try:
@@ -214,7 +197,7 @@ class Package:
             self._build()
             self._write_wrapper_script()
             self._link()
-            self._write_receipt()
+            self.receipt.write()
             os.chdir(prev_dir)
         except:
             shutil.rmtree(self.dir, ignore_errors=True)
@@ -421,14 +404,39 @@ class Package:
         for dest, source in self.opt.items():
             _create_symlink(self.dir / source, config.opt_dir / dest)
 
-    def _write_receipt(self) -> None:
+
+class Receipt:
+    name: str
+    purl: Purl
+    bin: dict[str, str]
+    share: dict[str, str]
+    opt: dict[str, str]
+    dir: Path
+
+    def __init__(self, data: dict[str, Any] | Package) -> None:
+        if isinstance(data, dict):
+            self.name = data.get("name", "")
+            self.purl = Purl(data.get("primary_source", {}).get("id", ""))
+            self.bin = data.get("links", {}).get("bin", {})
+            self.share = data.get("links", {}).get("share", {})
+            self.opt = data.get("links", {}).get("opt", {})
+            self.dir = data.get("dir", Path)
+        elif isinstance(data, Package):
+            self.name = data.name
+            self.purl = data.purl
+            self.bin = {str(b.dest): str(b.source) for b in data.bin}
+            self.share = data.share
+            self.opt = data.opt
+            self.dir = data.dir
+
+    def write(self) -> None:
         (self.dir / "mason-receipt.json").write_text(
             json.dumps(
                 {
                     "name": self.name,
                     "primary_source": {"id": self.purl.purl},
                     "links": {
-                        "bin": {str(b.dest): str(b.source) for b in self.bin},
+                        "bin": self.bin,
                         "share": self.share,
                         "opt": self.opt,
                     },
