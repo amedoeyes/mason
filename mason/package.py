@@ -353,9 +353,9 @@ class Package:
             if bin.type:
                 match bin.type:
                     case "dotnet":
-                        _write_script(bin.source, f'dotnet "{self.dir / bin.source}"')
+                        _write_script(bin.source, f'dotnet "{self.dir / bin.target}"')
                     case "exec":
-                        _write_script(bin.source, str(self.dir / bin.source))
+                        _write_script(bin.source, str(self.dir / bin.target))
                     case "gem":
                         _write_script(
                             bin.source,
@@ -363,19 +363,19 @@ class Package:
                             {"GEM_PATH": f"{self.dir}{select_by_os(unix=':$GEM_PATH', windows=';%%GEM_PATH%%')}"},
                         )
                     case "java-jar":
-                        _write_script(bin.source, f'java -jar "{self.dir / bin.source}"')
+                        _write_script(bin.source, f'java -jar "{self.dir / bin.target}"')
                     case "node":
-                        _write_script(bin.source, f'node "{self.dir / bin.source}"')
+                        _write_script(bin.source, f'node "{self.dir / bin.target}"')
                     case "php":
-                        _write_script(bin.source, f'php "{self.dir / bin.source}"')
+                        _write_script(bin.source, f'php "{self.dir / bin.target}"')
                     case "python":
                         _write_script(
-                            bin.source, f'{select_by_os(unix="python3", windows="python")} "{self.dir / bin.source}"'
+                            bin.source, f'{select_by_os(unix="python3", windows="python")} "{self.dir / bin.target}"'
                         )
                     case "pyvenv":
                         _write_script(bin.source, f"{self.dir / 'venv/bin/python'} -m {bin.target}")
                     case "ruby":
-                        _write_script(bin.source, f'ruby "{self.dir / bin.source}"')
+                        _write_script(bin.source, f'ruby "{self.dir / bin.target}"')
 
     def _link(self) -> None:
         def _create_symlink(source: Path, dest: Path) -> None:
