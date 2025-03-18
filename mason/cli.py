@@ -37,6 +37,10 @@ def uninstall(args: Any, ctx: Context) -> None:
         pkg.uninstall()
 
 
+def update(ctx: Context) -> None:
+    ctx.update_registries()
+
+
 def list(ctx: Context) -> None:
     for pkg in (cast(Package, ctx.package(p)) for p in ctx.installed_package_names):
         print(f"{pkg.name}@{pkg.purl.version}")
@@ -98,6 +102,9 @@ def main():
         parser_uninstall = subparsers.add_parser("uninstall", help="uninstall packages", formatter_class=formatter)
         parser_uninstall.set_defaults(func=lambda args: uninstall(args, ctx))
         parser_uninstall.add_argument("package", nargs="+").completer = ChoicesCompleter(ctx.installed_package_names)
+
+        parser_update = subparsers.add_parser("update", help="update repositories", formatter_class=formatter)
+        parser_update.set_defaults(func=lambda _: update(ctx))
 
         parser_list = subparsers.add_parser("list", help="list installed packages", formatter_class=formatter)
         parser_list.set_defaults(func=lambda _: list(ctx))

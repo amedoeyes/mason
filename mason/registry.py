@@ -43,6 +43,8 @@ class Registry:
                 if data["tag_name"] != self.info["version"]:
                     self._download_github_registry()
                     self._load()
+                else:
+                    print(f"'{self.type}:{self.source}' is up to date")
             case "file":
                 pass
             case _:
