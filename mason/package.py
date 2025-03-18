@@ -18,6 +18,7 @@ from mason.utility import (
     extract_file,
     is_extractable,
     is_platform,
+    safe_rmtree,
     select_by_os,
 )
 
@@ -200,7 +201,7 @@ class Package:
             self.receipt.write()
             os.chdir(prev_dir)
         except:
-            shutil.rmtree(self.dir, ignore_errors=True)
+            safe_rmtree(self.dir, config.data_dir)
             raise
 
     def _download(self) -> None:

@@ -106,3 +106,11 @@ def is_platform(targets: tuple[str]) -> bool:
         return targets
 
     return any(t in current_targets() for t in targets)
+
+
+def safe_rmtree(dir: Path, base: Path):
+    if not dir.is_dir() and dir.is_symlink():
+        raise ValueError(f"'{dir}' is not a valid directory")
+    if not str(dir.resolve()).startswith(str(base.resolve())):
+        raise ValueError(f"'{dir}' is outside the trusted base directory")
+    shutil.rmtree(dir)
