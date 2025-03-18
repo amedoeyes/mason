@@ -34,9 +34,7 @@ def main():
         parser_install = subparsers.add_parser("install", help="install packages", formatter_class=formatter)
         parser_install.set_defaults(func=lambda args: commands.install(args, ctx))
         parser_install.add_argument("-u", "--update-registries", action="store_true", help="update registries")
-        parser_install.add_argument("package", nargs="+").completer = ChoicesCompleter(
-            [pkg for pkg in ctx._packages_raw]
-        )
+        parser_install.add_argument("package", nargs="+").completer = ChoicesCompleter(ctx.package_names)
 
         parser_list = subparsers.add_parser("list", help="list installed packages", formatter_class=formatter)
         parser_list.set_defaults(func=lambda _: commands.list(ctx))
