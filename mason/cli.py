@@ -8,7 +8,7 @@ from argcomplete.completers import ChoicesCompleter
 
 from mason import config
 from mason.context import Context
-from mason.package import Package
+from mason.package import Package, Receipt
 
 
 def install(args: Any, ctx: Context) -> None:
@@ -39,6 +39,31 @@ def uninstall(args: Any, ctx: Context) -> None:
 
 def update(ctx: Context) -> None:
     ctx.update_registries()
+
+
+def upgrade(args: Any, ctx: Context) -> None:
+    pkgs_to_upgrade = []
+
+    for name in args.package or ctx.installed_package_names:
+        pkg = ctx.package(name)
+        if not pkg:
+            raise ValueError(f"Package '{name}' not found")
+        if name not in ctx.installed_package_names:
+            raise ValueError(f"Package '{name}' is not installed")
+        rct = Receipt(pkg)
+        if pkg.purl.version != rct.purl.version:
+            pkgs_to_upgrade.append((pkg, rct))
+
+    if len(pkgs_to_upgrade) > 0:
+        for pkg, rct in pkgs_to_upgrade:
+            print(f"{pkg.name} {rct.purl.version} -> {pkg.purl.version}")
+
+        if input("Upgrade? [y/N]: ").strip().lower() == "y":
+            for pkg, _ in pkgs_to_upgrade:
+                pkg.uninstall()
+                pkg.install()
+    else:
+        print("All packages are up to date")
 
 
 def list(ctx: Context) -> None:
@@ -102,6 +127,10 @@ def main():
         parser_uninstall = subparsers.add_parser("uninstall", help="uninstall packages", formatter_class=formatter)
         parser_uninstall.set_defaults(func=lambda args: uninstall(args, ctx))
         parser_uninstall.add_argument("package", nargs="+").completer = ChoicesCompleter(ctx.installed_package_names)
+
+        parser_upgrade = subparsers.add_parser("upgrade", help="upgrade packages", formatter_class=formatter)
+        parser_upgrade.set_defaults(func=lambda args: upgrade(args, ctx))
+        parser_upgrade.add_argument("package", nargs="*").completer = ChoicesCompleter(ctx.installed_package_names)
 
         parser_update = subparsers.add_parser("update", help="update repositories", formatter_class=formatter)
         parser_update.set_defaults(func=lambda _: update(ctx))
