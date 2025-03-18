@@ -50,9 +50,6 @@ class Build:
         self.cmds = data["run"].splitlines()
         self.env = data.get("env", {})
 
-    def run(self) -> None:
-        subprocess.run(" && ".join(self.cmds), env={**os.environ, **self.env}, check=True, shell=True)
-
 
 class Bin:
     type: Optional[str]
@@ -119,6 +116,22 @@ class Bin:
             self.source = Path(source)
 
 
+class Receipt:
+    name: str
+    purl: Purl
+    bin: dict[str, str]
+    share: dict[str, str]
+    opt: dict[str, str]
+
+    def __init__(self, pkg: Package) -> None:
+        data = json.loads((pkg.dir / "mason-receipt.json").read_bytes())
+        self.name = data.get("name", "")
+        self.purl = Purl(data.get("primary_source", {}).get("id", ""))
+        self.bin = data.get("links", {}).get("bin", {})
+        self.share = data.get("links", {}).get("share", {})
+        self.opt = data.get("links", {}).get("opt", {})
+
+
 class Package:
     name: str
     description: str
@@ -135,8 +148,6 @@ class Package:
     share: dict[str, str]
     opt: dict[str, str]
     dir: Path
-    receipt: Receipt
-    is_installed: bool
 
     def __init__(self, data: dict[str, Any]) -> None:
         self.name = data["name"]
@@ -187,32 +198,31 @@ class Package:
         self.share = data.get("share", {})
         self.opt = data.get("opt", {})
 
-        if self.dir.exists() and (receipt_file := self.dir / "mason-receipt.json").exists():
-            self.receipt = Receipt(json.loads(receipt_file.read_bytes()))
-            self.is_installed = True
-        else:
-            self.receipt = Receipt(self)
-            self.is_installed = False
-
     def install(self) -> None:
         try:
-            self.dir.mkdir(parents=True, exist_ok=True)
-            prev_dir = os.curdir
-            os.chdir(self.dir)
-            os.environ["PWD"] = str(self.dir)
             self._download()
             self._build()
             self._write_wrapper_script()
             self._link()
-            self.receipt.write()
-            os.chdir(prev_dir)
+            self._write_receipt()
         except:
             safe_rmtree(self.dir, config.data_dir)
             raise
 
+    def uninstall(self) -> None:
+        receipt = Receipt(self)
+        for bin in receipt.bin:
+            os.remove(config.bin_dir / bin)
+        for share in receipt.share:
+            os.remove(config.share_dir / share)
+        for opt in receipt.opt:
+            os.remove(config.opt_dir / opt)
+        safe_rmtree(self.dir, config.data_dir)
+
     def _download(self) -> None:
-        def _run(cmd: list[str] | str, env: Optional[dict[str, str]] = None) -> None:
-            subprocess.run(cmd, env={**os.environ, **(env or {})}, check=True)
+        self.dir.mkdir(parents=True, exist_ok=True)
+        prev_dir = os.curdir
+        os.chdir(self.dir)
 
         type = self.purl.type
         namespace = self.purl.namespace
@@ -220,6 +230,9 @@ class Package:
         version = self.purl.version
         qualifiers = self.purl.qualifiers
         subpath = self.purl.subpath
+
+        def run(cmd: list[str] | str, env: Optional[dict[str, str]] = None) -> None:
+            subprocess.run(cmd, env={**os.environ, **(env or {})}, check=True)
 
         match type:
             case "cargo":
@@ -235,12 +248,12 @@ class Package:
                     if qualifiers.get("locked") == "true":
                         cmd.append("--locked")
                 cmd.append(name)
-                _run(cmd)
+                run(cmd)
             case "composer":
-                _run(["composer", "init", "--no-interaction", "--stability=stable"])
-                _run(["composer", "require", f"{namespace}/{name}:{version}"])
+                run(["composer", "init", "--no-interaction", "--stability=stable"])
+                run(["composer", "require", f"{namespace}/{name}:{version}"])
             case "gem":
-                _run(
+                run(
                     [
                         "gem",
                         "install",
@@ -280,14 +293,14 @@ class Package:
                             extract_file(asset_path, out_path)
                 else:
                     if (self.dir / ".git").exists():
-                        _run(["git", "fetch", "--depth=1", "--tags", "origin", version])
-                        _run(["git", "reset", "--hard", version])
+                        run(["git", "fetch", "--depth=1", "--tags", "origin", version])
+                        run(["git", "reset", "--hard", version])
                     else:
-                        _run(["git", "clone", "--depth=1", f"https://github.com/{repo}.git", "."])
-                        _run(["git", "fetch", "--depth=1", "--tags", "origin", version])
-                        _run(["git", "checkout", version])
+                        run(["git", "clone", "--depth=1", f"https://github.com/{repo}.git", "."])
+                        run(["git", "fetch", "--depth=1", "--tags", "origin", version])
+                        run(["git", "checkout", version])
             case "golang":
-                _run(
+                run(
                     ["go", "install", "-v", f"{namespace}/{name}{f'/{subpath}' if subpath else ''}@{version}"],
                     {**os.environ, "GOBIN": os.getcwd()},
                 )
@@ -299,17 +312,15 @@ class Package:
                     if qualifiers.get("dev") == "true":
                         cmd.append("--dev")
                 cmd += [name, version]
-                _run(cmd)
+                run(cmd)
             case "npm":
                 Path(".npmrc").write_text("install-strategy=shallow")
-                _run(["npm", "init", "--yes", "--scope=mason"])
-                _run(
-                    ["npm", "install", f"{f'{namespace}/' if namespace else ''}{name}@{version}", *self.extra_packages]
-                )
+                run(["npm", "init", "--yes", "--scope=mason"])
+                run(["npm", "install", f"{f'{namespace}/' if namespace else ''}{name}@{version}", *self.extra_packages])
             case "nuget":
-                _run(["dotnet", "tool", "update", "--tool-path", ".", "--version", version, name])
+                run(["dotnet", "tool", "update", "--tool-path", ".", "--version", version, name])
             case "opam":
-                _run(["opam", "install", "--destdir=.", "--yes", "--verbose", f"{name}.{version}"])
+                run(["opam", "install", "--destdir=.", "--yes", "--verbose", f"{name}.{version}"])
             case "openvsx":
                 for file in self.files or []:
                     out_path = Path(file)
@@ -319,10 +330,10 @@ class Package:
                     )
                     extract_file(out_path)
             case "pypi":
-                _run(
+                run(
                     [select_by_os(unix="python3", windows="python"), "-m", "venv", "venv", "--system-site-packages"],
                 )
-                _run(
+                run(
                     [
                         select_by_os(
                             unix=Path("venv") / "bin" / "python",
@@ -341,14 +352,21 @@ class Package:
             case _:
                 raise Exception(f"Installer for '{type}' is not implemented")
 
+        os.chdir(prev_dir)
+
     def _build(self) -> None:
         if self.build:
-            self.build.run()
+            prev_dir = os.curdir
+            os.chdir(self.dir)
+            os.environ["PWD"] = str(self.dir)
+            subprocess.run(" && ".join(self.build.cmds), env={**os.environ, **self.build.env}, check=True, shell=True)
+            os.chdir(prev_dir)
+            os.environ["PWD"] = str(prev_dir)
 
     def _write_wrapper_script(self) -> None:
         def _write_script(out_path: Path, command: str, env: dict[str, str] | None = None):
             env = env or {}
-            out_path.write_text(
+            (self.dir / out_path).write_text(
                 _SCRIPT_TEMPLATE.format(
                     "\n".join([f"{select_by_os(unix='export', windows='SET')} {k}={v}" for k, v in env.items()]),
                     command,
@@ -411,41 +429,25 @@ class Package:
         for dest, source in self.opt.items():
             _create_symlink(self.dir / source, config.opt_dir / dest)
 
+    def _write_receipt(self):
+        def resolve(source: Path, dest: Path) -> dict[str, str]:
+            if (self.dir / source).is_dir():
+                return {
+                    (dest / file.name).as_posix(): (source / file.name).as_posix()
+                    for file in [f for f in source.rglob("*") if f.is_file()]
+                }
+            else:
+                return {dest.as_posix(): source.as_posix()}
 
-class Receipt:
-    name: str
-    purl: Purl
-    bin: dict[str, str]
-    share: dict[str, str]
-    opt: dict[str, str]
-    dir: Path
-
-    def __init__(self, data: dict[str, Any] | Package) -> None:
-        if isinstance(data, dict):
-            self.name = data.get("name", "")
-            self.purl = Purl(data.get("primary_source", {}).get("id", ""))
-            self.bin = data.get("links", {}).get("bin", {})
-            self.share = data.get("links", {}).get("share", {})
-            self.opt = data.get("links", {}).get("opt", {})
-            self.dir = data.get("dir", Path)
-        elif isinstance(data, Package):
-            self.name = data.name
-            self.purl = data.purl
-            self.bin = {str(b.dest): str(b.source) for b in data.bin}
-            self.share = data.share
-            self.opt = data.opt
-            self.dir = data.dir
-
-    def write(self) -> None:
         (self.dir / "mason-receipt.json").write_text(
             json.dumps(
                 {
                     "name": self.name,
                     "primary_source": {"id": self.purl.purl},
                     "links": {
-                        "bin": self.bin,
-                        "share": self.share,
-                        "opt": self.opt,
+                        "bin": {b.dest.as_posix(): b.source.as_posix() for b in self.bin},
+                        "share": {k: v for d, s in self.share.items() for k, v in resolve(Path(s), Path(d)).items()},
+                        "opt": {k: v for d, s in self.opt.items() for k, v in resolve(Path(s), Path(d)).items()},
                     },
                 }
             )

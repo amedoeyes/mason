@@ -51,6 +51,10 @@ def main():
         )
         parser_search.add_argument("-l", "--language", metavar="language", help="specify language for search")
 
+        parser_uninstall = subparsers.add_parser("uninstall", help="uninstall packages", formatter_class=formatter)
+        parser_uninstall.set_defaults(func=lambda args: commands.uninstall(args, ctx))
+        parser_uninstall.add_argument("package", nargs="+").completer = ChoicesCompleter(ctx.installed_package_names)
+
         argcomplete.autocomplete(parser)
 
         if len(sys.argv) == 1:
