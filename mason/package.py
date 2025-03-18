@@ -3,7 +3,6 @@ import json
 import os
 import re
 from pathlib import Path
-import shutil
 import subprocess
 import textwrap
 from typing import Any, Optional
@@ -137,6 +136,7 @@ class Package:
     opt: dict[str, str]
     dir: Path
     receipt: Receipt
+    is_installed: bool
 
     def __init__(self, data: dict[str, Any]) -> None:
         self.name = data["name"]
@@ -186,7 +186,13 @@ class Package:
         self.bin = [Bin(s, d) for d, s in data.get("bin", {}).items()]
         self.share = data.get("share", {})
         self.opt = data.get("opt", {})
-        self.receipt = Receipt(self)
+
+        if self.dir.exists() and (receipt_file := self.dir / "mason-receipt.json").exists():
+            self.receipt = Receipt(json.loads(receipt_file.read_bytes()))
+            self.is_installed = True
+        else:
+            self.receipt = Receipt(self)
+            self.is_installed = False
 
     def install(self) -> None:
         try:

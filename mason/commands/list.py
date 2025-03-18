@@ -2,5 +2,5 @@ from mason.context import Context
 
 
 def list(ctx: Context) -> None:
-    for rct in ctx.receipts:
-        print(f"{rct.name}@{rct.purl.version}")
+    for pkg in ctx.installed_packages:
+        print(f"{pkg.name}@{pkg.purl.version}")
