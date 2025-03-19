@@ -21,6 +21,11 @@ from mason.utility import (
     select_by_os,
 )
 
+env = Environment()
+env.filters["take_if_not"] = lambda value, cond: value if not cond else None
+env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
+env.globals["is_platform"] = is_platform
+
 
 _SCRIPT_TEMPLATE = select_by_os(
     unix=textwrap.dedent("""\
@@ -169,20 +174,13 @@ class Package:
                     data["source"][field] = item
                     break
 
-        env = Environment()
-        env.filters["take_if_not"] = lambda value, cond: value if not cond else None
-        env.filters["strip_prefix"] = lambda value, prefix: value[len(prefix) :] if value.startswith(prefix) else value
-        env.globals["is_platform"] = is_platform
-        env.globals["version"] = self.purl.version
-        env.globals.update(data)
-
         data_str = json.dumps(data)
         prev = None
         while prev != data_str:
             prev = data_str
             for pattern, replacement in _JINJA_SYNTAX_FIX:
                 data_str = pattern.sub(replacement, data_str)
-            data_str = env.from_string(data_str).render()
+            data_str = env.from_string(data_str, globals={"version": self.purl.version, **data}).render()
 
         data = json.loads(data_str)
 
