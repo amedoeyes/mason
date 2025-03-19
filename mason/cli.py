@@ -1,9 +1,12 @@
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Any, cast
+import time
 
 import argcomplete
+import portalocker
 from argcomplete.completers import ChoicesCompleter
 
 from mason import config
@@ -11,7 +14,22 @@ from mason.context import Context
 from mason.package import Package, Receipt
 
 
+def acquire_lock():
+    lockfile = open(config.data_dir / "mason.lock", "w")
+    printed = False
+    while True:
+        try:
+            portalocker.lock(lockfile, portalocker.LOCK_EX | portalocker.LOCK_NB)
+            return lockfile
+        except portalocker.LockException:
+            if not printed:
+                print("Another instance is running. Waiting...\r")
+                printed = True
+            time.sleep(1)
+
+
 def install(ctx: Context, args: Any) -> None:
+    lock = acquire_lock()
     for name in args.package:
         pkg = ctx.package(name)
         if not pkg:
@@ -20,9 +38,12 @@ def install(ctx: Context, args: Any) -> None:
             raise ValueError(f"Package '{pkg.name}' is deprecated: {pkg.deprecation}")
         print(f"Installing '{name}'...")
         pkg.install()
+    lock.close()
+    os.remove(lock.name)
 
 
 def uninstall(ctx: Context, args: Any) -> None:
+    lock = acquire_lock()
     for name in args.package:
         pkg = ctx.package(name)
         if not pkg:
@@ -31,13 +52,19 @@ def uninstall(ctx: Context, args: Any) -> None:
             raise ValueError(f"Package '{name}' is not installed")
         print(f"Uninstalling '{name}'...")
         pkg.uninstall()
+    lock.close()
+    os.remove(lock.name)
 
 
 def update(ctx: Context, _) -> None:
+    lock = acquire_lock()
     ctx.update_registries()
+    lock.close()
+    os.remove(lock.name)
 
 
 def upgrade(ctx: Context, args: Any) -> None:
+    lock = acquire_lock()
     pkgs_to_upgrade = []
 
     for name in args.package or ctx.installed_package_names:
@@ -60,6 +87,9 @@ def upgrade(ctx: Context, args: Any) -> None:
                 pkg.install()
     else:
         print("All packages are up to date")
+
+    lock.close()
+    os.remove(lock.name)
 
 
 def list(ctx: Context, _) -> None:
