@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/amedoeyes/mason/pkg/context"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "mason",
 	Short: "Mason package manager",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cmd.SetContext(context.NewContext(cmd.Context()))
+	},
 }
 
 func Execute() {
