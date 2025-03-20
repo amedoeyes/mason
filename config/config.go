@@ -49,11 +49,10 @@ func NewConfig() *Config {
 	config.ShareDir = filepath.Join(config.DataDir, "share")
 	config.OptDir = filepath.Join(config.DataDir, "opt")
 
-	var registries []string
 	regs := getEnv("MASON_REGISTRIES", "github:mason-org/mason-registry")
 	for r := range strings.SplitSeq(regs, ",") {
 		if trimmed := strings.TrimSpace(r); trimmed != "" {
-			registries = append(registries, trimmed)
+			config.Registries = append(config.Registries, trimmed)
 		}
 	}
 
