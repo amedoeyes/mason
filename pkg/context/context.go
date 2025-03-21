@@ -1,22 +1,18 @@
 package context
 
 import (
-	"context"
-
 	"github.com/amedoeyes/mason/config"
 	"github.com/amedoeyes/mason/pkg/registry"
 )
 
 type Context struct {
-	context.Context
 	Config     *config.Config
 	Registries []*registry.Registry
 }
 
-func NewContext(ctx context.Context) (*Context, error) {
+func NewContext() (*Context, error) {
 	new_ctx := &Context{
-		Context: ctx,
-		Config:  config.NewConfig(),
+		Config: config.NewConfig(),
 	}
 	new_ctx.Registries = make([]*registry.Registry, 0, len(new_ctx.Config.Registries))
 

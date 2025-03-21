@@ -1,22 +1,27 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/amedoeyes/mason/pkg/context"
+	mason_context "github.com/amedoeyes/mason/pkg/context"
 	"github.com/spf13/cobra"
 )
+
+type key string
+
+const contextKey = key("ctx")
 
 var rootCmd = &cobra.Command{
 	Use:   "mason",
 	Short: "Mason package manager",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		ctx, err := context.NewContext(cmd.Context())
+		ctx, err := mason_context.NewContext()
 		if err != nil {
 			panic(err)
 		}
-		cmd.SetContext(ctx)
+		cmd.SetContext(context.WithValue(cmd.Context(), contextKey, ctx))
 	},
 }
 
