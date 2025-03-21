@@ -12,7 +12,11 @@ var rootCmd = &cobra.Command{
 	Use:   "mason",
 	Short: "Mason package manager",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		cmd.SetContext(context.NewContext(cmd.Context()))
+		ctx, err := context.NewContext(cmd.Context())
+		if err != nil {
+			panic(err)
+		}
+		cmd.SetContext(ctx)
 	},
 }
 
