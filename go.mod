@@ -3,6 +3,7 @@ module github.com/amedoeyes/mason
 go 1.24.1
 
 require (
+	github.com/package-url/packageurl-go v0.1.3
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.9.1
 	github.com/ulikunitz/xz v0.5.12
