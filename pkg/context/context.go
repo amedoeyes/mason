@@ -2,12 +2,14 @@ package context
 
 import (
 	"github.com/amedoeyes/mason/config"
+	package_ "github.com/amedoeyes/mason/pkg/package"
 	"github.com/amedoeyes/mason/pkg/registry"
 )
 
 type Context struct {
 	Config     *config.Config
 	Registries []*registry.Registry
+	Packages   map[string]*package_.Package
 }
 
 func NewContext() (*Context, error) {
@@ -22,6 +24,17 @@ func NewContext() (*Context, error) {
 			return nil, err
 		}
 		new_ctx.Registries = append(new_ctx.Registries, reg)
+	}
+
+	new_ctx.Packages = map[string]*package_.Package{}
+	for _, r := range new_ctx.Registries {
+		entries, err := r.Load()
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			new_ctx.Packages[e.Name] = package_.NewPackage(e)
+		}
 	}
 
 	return new_ctx, nil
