@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/amedoeyes/mason/pkg/registry"
@@ -52,7 +51,7 @@ type Download struct {
 
 type Build struct {
 	Run string
-	Env *map[string]string
+	Env *[]string
 }
 
 func NewPackage(entry registry.RegistryEntry) *Package {
@@ -106,7 +105,6 @@ func NewPackage(entry registry.RegistryEntry) *Package {
 			}
 		}
 	}
-
 	if buildMap, ok := entry.Source.Build.(map[string]any); ok {
 		if runRaw, exists := buildMap["run"]; exists {
 			if run, ok := runRaw.(string); ok {
@@ -115,13 +113,13 @@ func NewPackage(entry registry.RegistryEntry) *Package {
 		}
 		if envRaw, exists := buildMap["env"]; exists {
 			if envMap, ok := envRaw.(map[string]any); ok {
-				m := make(map[string]string, len(envMap))
+				env := []string{}
 				for key, value := range envMap {
 					if value, ok := value.(string); ok {
-						m[key] = value
+						env = append(env, fmt.Sprintf("%s=%s", key, value))
 					}
 				}
-				pkg.Source.Build.Env = &m
+				pkg.Source.Build.Env = &env
 			}
 		}
 	}
@@ -350,7 +348,10 @@ func (p *Package) Download(dir string) error {
 
 	case "pypi":
 		python := utility.SelectByOS("python3", "python")
-		venvPython := utility.SelectByOS(filepath.Join("venv", "bin", "python"), filepath.Join("venv", "Scripts", "python.exe"))
+		venvPython := utility.SelectByOS(
+			filepath.Join("venv", "bin", "python"),
+			filepath.Join("venv", "Scripts", "python.exe"),
+		)
 
 		initCmd := []string{python, "-m", "venv", "venv", "--system-site-packages"}
 		extra := ""
@@ -374,4 +375,37 @@ func (p *Package) Download(dir string) error {
 	}
 
 	return nil
+}
+
+func (p *Package) Build(dir string) error {
+	if p.Source.Build == nil {
+		return nil
+	}
+
+	cmd := utility.SelectByOS(
+		[]string{
+			"bash",
+			"-c",
+			"set -euxo pipefail;\n" +
+				p.Source.Build.Run,
+		},
+		[]string{
+			"powershell",
+			"-Command",
+			"$ErrorActionPreference = 'Stop';" +
+				"$ProgressPreference = 'SilentlyContinue';" +
+				"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;" +
+				p.Source.Build.Run,
+		},
+	)
+
+	cmdExec := exec.Command(cmd[0], cmd[1:]...)
+	if p.Source.Build.Env != nil {
+		cmdExec.Env = append(os.Environ(), *p.Source.Build.Env...)
+	}
+	cmdExec.Dir = dir
+	cmdExec.Stdout = os.Stdout
+	cmdExec.Stderr = os.Stderr
+
+	return cmdExec.Run()
 }
