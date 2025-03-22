@@ -212,33 +212,37 @@ func (p *Package) Download(dir string) error {
 
 		if p.Source.Asset != nil {
 			for _, file := range p.Source.Asset.File {
-				parts := strings.Split(file, ":")
 				outDir := dir
-				outPath := file
+				outPath := ""
 
-				if len(parts) == 2 {
+				if strings.Contains(file, ":") {
+					parts := strings.Split(file, ":")
 					source := parts[0]
 					dest := parts[1]
 
 					if strings.HasSuffix(dest, "/") {
 						outDir = filepath.Join(outDir, dest)
+						outPath = filepath.Join(outDir, source)
+
 						if err := os.MkdirAll(outDir, 0755); err != nil {
 							return err
 						}
 						if err := utility.DownloadGithubRelease(repo, source, version, outDir); err != nil {
 							return err
 						}
-						outPath = filepath.Join(outDir, source)
 					} else {
+						outPath = filepath.Join(outDir, dest)
+
 						if err := utility.DownloadGithubRelease(repo, source, version, outDir); err != nil {
 							return err
 						}
-						if err := os.Rename(source, dest); err != nil {
+						if err := os.Rename(filepath.Join(outDir, source), outPath); err != nil {
 							return err
 						}
-						outPath = dest
 					}
 				} else {
+					outPath = filepath.Join(outDir, file)
+
 					if err := utility.DownloadGithubRelease(repo, file, version, outDir); err != nil {
 						return err
 					}
