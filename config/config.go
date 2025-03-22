@@ -15,8 +15,7 @@ type Config struct {
 	BinDir        string
 	ShareDir      string
 	OptDir        string
-	RegistryRepo  string
-	RegistryPath  string
+	StagingDir    string
 	Registries    []string
 }
 
@@ -48,6 +47,7 @@ func NewConfig() *Config {
 	config.BinDir = filepath.Join(config.DataDir, "bin")
 	config.ShareDir = filepath.Join(config.DataDir, "share")
 	config.OptDir = filepath.Join(config.DataDir, "opt")
+	config.StagingDir = filepath.Join(config.DataDir, "staging")
 
 	regs := getEnv("MASON_REGISTRIES", "github:mason-org/mason-registry")
 	for r := range strings.SplitSeq(regs, ",") {
