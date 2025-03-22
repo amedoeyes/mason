@@ -276,9 +276,15 @@ func evalArg(argStr string, context map[string]any) (any, error) {
 
 func parseString(s string) (any, error) {
 	s = strings.TrimSpace(s)
+
+	if strings.HasPrefix(s, "\\\"") && strings.HasSuffix(s, "\\\"") {
+		return s[2 : len(s)-2], nil
+	}
+
 	if (strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"")) ||
 		(strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'")) {
 		return s[1 : len(s)-1], nil
 	}
+
 	return nil, fmt.Errorf("not a string: %s", s)
 }

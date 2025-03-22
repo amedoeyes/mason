@@ -300,7 +300,6 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		entryStr = []byte(strings.ReplaceAll(string(entryStr), `\"`, `'`))
 
 		var ctx map[string]any
 		if err := json.Unmarshal(entryStr, &ctx); err != nil {
