@@ -16,16 +16,19 @@ func DownloadFile(url, outPath string) error {
 		return err
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download: status %s", resp.Status)
 	}
+
 	totalSize := resp.ContentLength
 	outFile, err := os.Create(outPath)
 	if err != nil {
 		return err
 	}
 	defer outFile.Close()
-	bar := progressbar.DefaultBytes(totalSize, fmt.Sprintf("downloading '%s'", filepath.Base(outFile.Name())))
+
+	bar := progressbar.DefaultBytes(totalSize, filepath.Base(outFile.Name()))
 	_, err = io.Copy(io.MultiWriter(outFile, bar), resp.Body)
 	return err
 }

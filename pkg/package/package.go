@@ -409,3 +409,160 @@ func (p *Package) Build(dir string) error {
 
 	return cmdExec.Run()
 }
+
+func (p *Package) Link(dir, binDir, shareDir, optDir string) error {
+	if p.Bin != nil {
+		for dest, source := range *p.Bin {
+			if strings.Contains(source, ":") {
+				parts := strings.Split(source, ":")
+				type_, target := parts[0], parts[1]
+
+				switch type_ {
+				case "dotnet", "exec", "gem", "java-jar", "node", "php", "python", "pyvenv", "ruby":
+					source = filepath.Join(dir, utility.SelectByOS(dest, dest+".cmd"))
+					var command string
+					var env []string
+
+					switch type_ {
+					case "dotnet":
+						command = fmt.Sprintf("dotnet \"%s\"", filepath.Join(dir, target))
+					case "exec":
+						command = filepath.Join(dir, target)
+					case "gem":
+						command = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".bat"))
+						env = []string{fmt.Sprintf("GEM_PATH=%s%s", dir, utility.SelectByOS(":$GEM_PATH", ";%%GEM_PATH%%"))}
+					case "java-jar":
+						command = fmt.Sprintf("java -jar \"%s\"", filepath.Join(dir, target))
+					case "node":
+						command = fmt.Sprintf("node \"%s\"", filepath.Join(dir, target))
+					case "php":
+						command = fmt.Sprintf("php \"%s\"", filepath.Join(dir, target))
+					case "python":
+						command = fmt.Sprintf("%s \"%s\"", utility.SelectByOS("python3", "python"), filepath.Join(dir, target))
+					case "pyvenv":
+						command = fmt.Sprintf("%s -m %s", utility.SelectByOS(filepath.Join("venv", "bin", "python"), filepath.Join("venv", "Scripts", "python.exe")), target)
+					case "ruby":
+						command = fmt.Sprintf("ruby \"%s\"", filepath.Join(dir, target))
+					}
+					if err := writeScript(source, command, env); err != nil {
+						return err
+					}
+				case "cargo":
+					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
+				case "composer":
+					source = filepath.Join(dir, "vendor", "bin", utility.SelectByOS(target, target+".bat"))
+				case "golang":
+					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
+				case "luarocks":
+					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".bat"))
+				case "npm":
+					source = filepath.Join(dir, "node_modules", ".bin", utility.SelectByOS(target, target+".cmd"))
+				case "nuget":
+					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
+				case "opam":
+					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
+				case "pypi":
+					source = filepath.Join(dir, "venv", utility.SelectByOS(filepath.Join("bin", target), filepath.Join("Scripts", target+".exe")))
+				default:
+					return fmt.Errorf("resolver for '%s' is not implemented", type_)
+				}
+			}
+
+			if err := utility.CreateSymlink(source, filepath.Join(binDir, dest)); err != nil {
+				return err
+			}
+			err := os.Chmod(source, 0755)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if p.Share != nil {
+		for dest, source := range *p.Share {
+			if err := utility.CreateSymlink(filepath.Join(dir, source), filepath.Join(shareDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if p.Opt != nil {
+		for dest, source := range *p.Opt {
+			if err := utility.CreateSymlink(filepath.Join(dir, source), filepath.Join(optDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Package) Unlink(dir, binDir, shareDir, optDir string) error {
+	if p.Bin != nil {
+		for dest, source := range *p.Bin {
+			if strings.Contains(source, ":") {
+				parts := strings.Split(source, ":")
+				type_, target := parts[0], parts[1]
+
+				switch type_ {
+				case "dotnet", "exec", "gem", "java-jar", "node", "php", "python", "pyvenv", "ruby":
+					source = filepath.Join(dir, utility.SelectByOS(dest, dest+".cmd"))
+				case "cargo":
+					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
+				case "composer":
+					source = filepath.Join(dir, "vendor", "bin", utility.SelectByOS(target, target+".bat"))
+				case "golang":
+					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
+				case "luarocks":
+					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".bat"))
+				case "npm":
+					source = filepath.Join(dir, "node_modules", ".bin", utility.SelectByOS(target, target+".cmd"))
+				case "nuget":
+					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
+				case "opam":
+					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
+				case "pypi":
+					source = filepath.Join(dir, "venv", utility.SelectByOS(filepath.Join("bin", target), filepath.Join("Scripts", target+".exe")))
+				default:
+					return fmt.Errorf("resolver for '%s' is not implemented", type_)
+				}
+			}
+
+			if err := utility.RemoveSymlink(source, filepath.Join(binDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if p.Share != nil {
+		for dest, source := range *p.Share {
+			if err := utility.RemoveSymlink(filepath.Join(dir, source), filepath.Join(shareDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if p.Opt != nil {
+		for dest, source := range *p.Opt {
+			if err := utility.RemoveSymlink(filepath.Join(dir, source), filepath.Join(optDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+var scriptTemplate = utility.SelectByOS(
+	"#!/usr/bin/env bash\n%s\nexec %s \"$@\"\n",
+	"@ECHO off\n%s\n%s %%*\n",
+)
+
+func writeScript(outPath, command string, env []string) error {
+	envLines := []string{}
+	for _, e := range env {
+		envLines = append(envLines, fmt.Sprintf("%s %s", utility.SelectByOS("export", "SET"), e))
+	}
+	content := fmt.Sprintf(scriptTemplate, strings.Join(envLines, "\n"), command)
+	return os.WriteFile(outPath, []byte(content), 0755)
+}

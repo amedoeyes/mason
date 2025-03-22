@@ -41,7 +41,15 @@ func NewRegistry(registry, dir string) (*Registry, error) {
 		checksumsFile := filepath.Join(dir, "checksums.txt")
 		infoFile := filepath.Join(dir, "info.json")
 
-		if !utility.PathExists(registryFile) || !utility.PathExists(infoFile) {
+		regExists, err := utility.PathExists(registryFile)
+		if err != nil {
+			return nil, err
+		}
+		infoExists, err := utility.PathExists(infoFile)
+		if err != nil {
+			return nil, err
+		}
+		if !regExists || !infoExists {
 			if err := utility.DownloadGithubRelease(source, "registry.json.zip", "", dir); err != nil {
 				return nil, err
 			}
