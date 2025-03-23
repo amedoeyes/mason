@@ -79,9 +79,13 @@ func NewPackage(entry registry.RegistryEntry) *Package {
 				pkg.Source.Asset = &Asset{
 					File: []string{v},
 				}
-			case []string:
+			case []any:
+				var strSlice []string
+				for _, val := range v {
+					strSlice = append(strSlice, val.(string))
+				}
 				pkg.Source.Asset = &Asset{
-					File: v,
+					File: strSlice,
 				}
 			}
 		}
@@ -466,6 +470,8 @@ func (p *Package) Link(dir, binDir, shareDir, optDir string) error {
 				default:
 					return fmt.Errorf("resolver for '%s' is not implemented", type_)
 				}
+			} else {
+				source = filepath.Join(dir, source)
 			}
 
 			if err := utility.CreateSymlink(source, filepath.Join(binDir, dest)); err != nil {
