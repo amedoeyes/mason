@@ -8,12 +8,12 @@ import (
 )
 
 func ConfirmPrompt(message string) bool {
-	fmt.Printf("%s [y/N] ", message)
+	fmt.Printf("%s [Y/n] ", message)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		input := strings.ToLower(strings.TrimSpace(scanner.Text()))
-		return input == "y" || input == "yes"
+		return input == "y" || input == "yes" || input == ""
 	}
 	return false
 }
