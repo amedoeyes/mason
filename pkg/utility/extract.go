@@ -18,14 +18,14 @@ import (
 func ExtractFile(filePath, outDir string) error {
 	lowerName := strings.ToLower(filePath)
 	switch {
-	case strings.HasSuffix(lowerName, ".gz"):
-		return decompressGzip(filePath, outDir)
 	case strings.HasSuffix(lowerName, ".tar"):
 		return extractTar(filePath, outDir)
 	case strings.HasSuffix(lowerName, ".tar.bz2") || strings.HasSuffix(lowerName, ".tbz2"):
 		return extractTarBz2(filePath, outDir)
 	case strings.HasSuffix(lowerName, ".tar.gz") || strings.HasSuffix(lowerName, ".tgz"):
 		return extractTarGz(filePath, outDir)
+	case strings.HasSuffix(lowerName, ".gz"):
+		return decompressGzip(filePath, outDir)
 	case strings.HasSuffix(lowerName, ".tar.xz") || strings.HasSuffix(lowerName, ".txz"):
 		return extractTarXz(filePath, outDir)
 	case strings.HasSuffix(lowerName, ".zip") || strings.HasSuffix(lowerName, ".vsix"):
