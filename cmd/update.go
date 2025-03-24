@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/amedoeyes/mason/pkg/context"
 	"github.com/spf13/cobra"
 )
 
@@ -10,6 +9,12 @@ var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update repositories",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Update command called")
+		ctx := cmd.Context().Value(contextKey).(*context.Context)
+
+		for _, reg := range ctx.Registries {
+			if err := reg.Update(); err != nil {
+				panic(err)
+			}
+		}
 	},
 }

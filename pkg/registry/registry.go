@@ -15,10 +15,10 @@ import (
 )
 
 type Registry struct {
-	kind   string
-	source string
-	dir    string
-	info   RegistryInfo
+	Kind   string
+	Source string
+	Dir    string
+	Info   RegistryInfo
 }
 
 type RegistryInfo struct {
@@ -50,6 +50,8 @@ func NewRegistry(registry, dir string) (*Registry, error) {
 			return nil, err
 		}
 		if !regExists || !infoExists {
+			fmt.Printf("Downloading '%s:%s'...\n", kind, source)
+
 			if err := utility.DownloadGithubRelease(source, "registry.json.zip", "", dir); err != nil {
 				return nil, err
 			}
@@ -117,13 +119,13 @@ func NewRegistry(registry, dir string) (*Registry, error) {
 		return nil, fmt.Errorf("invalid registry kind: '%s'", kind)
 	}
 
-	return &Registry{kind: kind, source: source, dir: dir, info: info}, nil
+	return &Registry{Kind: kind, Source: source, Dir: dir, Info: info}, nil
 }
 
 func (r *Registry) Update() error {
-	switch r.kind {
+	switch r.Kind {
 	case "github":
-		resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", r.source))
+		resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", r.Source))
 		if err != nil {
 			return err
 		}
@@ -134,42 +136,44 @@ func (r *Registry) Update() error {
 			return err
 		}
 
-		if data["tag_name"].(string) != r.info.Version {
-			registryZipFile := filepath.Join(r.dir, "registry.json.zip")
-			checksumsFile := filepath.Join(r.dir, "checksums.txt")
-			infoFile := filepath.Join(r.dir, "info.json")
+		if data["tag_name"].(string) != r.Info.Version {
+			registryZipFile := filepath.Join(r.Dir, "registry.json.zip")
+			checksumsFile := filepath.Join(r.Dir, "checksums.txt")
+			infoFile := filepath.Join(r.Dir, "info.json")
 
-			if err := utility.DownloadGithubRelease(r.source, "registry.json.zip", "", r.dir); err != nil {
+			fmt.Printf("Updating '%s:%s'...\n", r.Kind, r.Source)
+
+			if err := utility.DownloadGithubRelease(r.Source, "registry.json.zip", "", r.Dir); err != nil {
 				return err
 			}
 
-			if err := utility.DownloadGithubRelease(r.source, "checksums.txt", "", r.dir); err != nil {
+			if err := utility.DownloadGithubRelease(r.Source, "checksums.txt", "", r.Dir); err != nil {
 				return err
 			}
 
-			utility.ExtractFile(registryZipFile, r.dir)
+			utility.ExtractFile(registryZipFile, r.Dir)
 
 			checksums, err := utility.ReadChecksums(checksumsFile)
 			if err != nil {
 				return err
 			}
-			if ok, err := utility.VerifyChecksums(checksums, r.dir); !ok {
+			if ok, err := utility.VerifyChecksums(checksums, r.Dir); !ok {
 				if err != nil {
 					return err
 				}
-				return fmt.Errorf("checksums missmatch for '%s'", r.source)
+				return fmt.Errorf("checksums missmatch for '%s'", r.Source)
 			}
 
 			os.Remove(registryZipFile)
 			os.Remove(checksumsFile)
 
-			r.info = RegistryInfo{
+			r.Info = RegistryInfo{
 				DownloadTimestamp: time.Now().Unix(),
 				Version:           data["tag_name"].(string),
 				Checksums:         checksums,
 			}
 
-			jsonData, err := json.Marshal(r.info)
+			jsonData, err := json.Marshal(r.Info)
 			if err != nil {
 				return err
 			}
@@ -181,7 +185,7 @@ func (r *Registry) Update() error {
 	case "file":
 
 	default:
-		return fmt.Errorf("registry type '%s' not implemented", r.kind)
+		return fmt.Errorf("registry type '%s' not implemented", r.Kind)
 	}
 
 	return nil
@@ -190,9 +194,9 @@ func (r *Registry) Update() error {
 func (r *Registry) Load() ([]RegistryEntry, error) {
 	var entries []RegistryEntry
 
-	switch r.kind {
+	switch r.Kind {
 	case "github":
-		data, err := os.ReadFile(filepath.Join(r.dir, "registry.json"))
+		data, err := os.ReadFile(filepath.Join(r.Dir, "registry.json"))
 		if err != nil {
 			return nil, err
 		}
@@ -203,13 +207,13 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 		}
 
 	case "file":
-		dirs, err := os.ReadDir(filepath.Join(r.source, "packages"))
+		dirs, err := os.ReadDir(filepath.Join(r.Source, "packages"))
 		if err != nil {
 			return nil, err
 		}
 
 		for _, dir := range dirs {
-			data, err := os.ReadFile(filepath.Join(r.source, "packages", dir.Name(), "package.yaml"))
+			data, err := os.ReadFile(filepath.Join(r.Source, "packages", dir.Name(), "package.yaml"))
 			if err != nil {
 				return nil, err
 			}
@@ -224,7 +228,7 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 		}
 
 	default:
-		return nil, fmt.Errorf("registry kind '%s' not implemented", r.kind)
+		return nil, fmt.Errorf("registry kind '%s' not implemented", r.Kind)
 	}
 
 	for i := range entries {
