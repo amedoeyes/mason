@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	package_ "github.com/amedoeyes/mason/pkg/package"
+	"github.com/amedoeyes/mason/pkg/package"
 	"github.com/amedoeyes/mason/pkg/utility"
 	"github.com/package-url/packageurl-go"
 )

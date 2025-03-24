@@ -3,12 +3,15 @@ package context
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/amedoeyes/mason/config"
 	package_ "github.com/amedoeyes/mason/pkg/package"
 	"github.com/amedoeyes/mason/pkg/receipt"
 	"github.com/amedoeyes/mason/pkg/registry"
 	"github.com/amedoeyes/mason/pkg/utility"
+
+	"github.com/gofrs/flock"
 )
 
 type Context struct {
@@ -64,4 +67,23 @@ func NewContext() (*Context, error) {
 	}
 
 	return ctx, nil
+}
+
+func (ctx *Context) AcquireLock() (*flock.Flock, error) {
+	lock := flock.New(filepath.Join(os.TempDir(), "mason.lock"))
+	printed := false
+	for {
+		locked, err := lock.TryLock()
+		if err != nil {
+			return nil, err
+		}
+		if locked {
+			return lock, nil
+		}
+		if !printed {
+			println("Another instance is running. Waiting...")
+			printed = true
+		}
+		time.Sleep(time.Second)
+	}
 }

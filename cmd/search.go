@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/amedoeyes/mason/pkg/context"
-	package_ "github.com/amedoeyes/mason/pkg/package"
+	"github.com/amedoeyes/mason/pkg/package"
 	"github.com/spf13/cobra"
 )
 

@@ -19,6 +19,16 @@ var uninstallCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context().Value(contextKey).(*context.Context)
 
+		lock, err := ctx.AcquireLock()
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			if err := lock.Unlock(); err != nil {
+				panic(err)
+			}
+		}()
+
 		receits := make(map[*receipt.Receipt]struct{}, len(args))
 
 		for _, p := range args {

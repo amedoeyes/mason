@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/amedoeyes/mason/pkg/context"
-	package_ "github.com/amedoeyes/mason/pkg/package"
+	"github.com/amedoeyes/mason/pkg/package"
 	"github.com/amedoeyes/mason/pkg/receipt"
 	"github.com/amedoeyes/mason/pkg/utility"
 	"github.com/spf13/cobra"
@@ -22,15 +22,19 @@ var upgradeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context().Value(contextKey).(*context.Context)
 
-		removeDir := func(dir string) {
-			exists, err := utility.PathExists(dir)
-			if err != nil {
+		lock, err := ctx.AcquireLock()
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			if err := lock.Unlock(); err != nil {
 				panic(err)
 			}
-			if exists {
-				if err := utility.SafeRemoveAll(dir, ctx.Config.DataDir); err != nil {
-					panic(err)
-				}
+		}()
+
+		removeDir := func(dir string) {
+			if err := utility.SafeRemoveAll(dir, ctx.Config.DataDir); err != nil {
+				panic(err)
 			}
 		}
 
