@@ -87,6 +87,14 @@ func SafeRemoveAll(dir, base string) error {
 		return fmt.Errorf("directory %s is outside the trusted base %s", absDir, absBase)
 	}
 
+	exists, err := PathExists(absDir)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+
 	info, err := os.Lstat(absDir)
 	if err != nil {
 		return fmt.Errorf("failed to stat %s: %w", absDir, err)
