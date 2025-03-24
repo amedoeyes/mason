@@ -22,11 +22,32 @@ type Context struct {
 }
 
 func NewContext() (*Context, error) {
-	ctx := &Context{
-		Config: config.NewConfig(),
-	}
-	ctx.Registries = make([]*registry.Registry, 0, len(ctx.Config.Registries))
+	ctx := &Context{}
 
+	ctx.Config = config.NewConfig()
+	if err := os.MkdirAll(ctx.Config.DataDir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(ctx.Config.PackagesDir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(ctx.Config.RegistriesDir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(ctx.Config.BinDir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(ctx.Config.ShareDir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(ctx.Config.OptDir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(ctx.Config.StagingDir, 0755); err != nil {
+		return nil, err
+	}
+
+	ctx.Registries = make([]*registry.Registry, 0, len(ctx.Config.Registries))
 	for _, r := range ctx.Config.Registries {
 		reg, err := registry.NewRegistry(r, ctx.Config.RegistriesDir)
 		if err != nil {

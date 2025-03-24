@@ -36,6 +36,10 @@ func NewRegistry(registry, dir string) (*Registry, error) {
 	switch kind {
 	case "github":
 		dir = filepath.Join(dir, "github", source)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, err
+		}
+
 		registryZipFile := filepath.Join(dir, "registry.json.zip")
 		registryFile := filepath.Join(dir, "registry.json")
 		checksumsFile := filepath.Join(dir, "checksums.txt")
