@@ -139,4 +139,12 @@ var installCmd = &cobra.Command{
 			}
 		}
 	},
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		ctx := cmd.Context().Value(contextKey).(*context.Context)
+		var suggestions []string
+		for _, pkg := range ctx.Packages {
+			suggestions = append(suggestions, pkg.Name)
+		}
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	},
 }

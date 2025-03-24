@@ -182,4 +182,12 @@ var upgradeCmd = &cobra.Command{
 			}
 		}
 	},
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		ctx := cmd.Context().Value(contextKey).(*context.Context)
+		var suggestions []string
+		for _, rct := range ctx.Receipts {
+			suggestions = append(suggestions, rct.Name)
+		}
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	},
 }
