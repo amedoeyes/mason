@@ -22,7 +22,7 @@ var installCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context().Value(contextKey).(*context.Context)
 
-		cleanup := func(dir string) {
+		removeDir := func(dir string) {
 			exists, err := utility.PathExists(dir)
 			if err != nil {
 				panic(err)
@@ -50,10 +50,28 @@ var installCmd = &cobra.Command{
 			pkgsToInstall[pkg] = struct{}{}
 		}
 
+		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
 		for pkg := range pkgsToInstall {
-			fmt.Printf("%s:%s@%s  ", pkg.Source.PURL.Type, pkg.Name, pkg.Source.PURL.Version)
+			if len(pkg.Source.PURL.Type) > maxTypeLen {
+				maxTypeLen = len(pkg.Source.PURL.Type)
+			}
+			if len(pkg.Name) > maxNameLen {
+				maxNameLen = len(pkg.Name)
+			}
+			if len(pkg.Source.PURL.Version) > maxVerLen {
+				maxVerLen = len(pkg.Source.PURL.Version)
+			}
 		}
-		print("\n\n")
+
+		format := fmt.Sprintf("%%-%ds %%-%ds %%-%ds\n", maxTypeLen, maxNameLen, maxVerLen)
+		for pkg := range pkgsToInstall {
+			fmt.Printf(format,
+				pkg.Source.PURL.Type,
+				pkg.Name,
+				pkg.Source.PURL.Version,
+			)
+		}
+		println()
 
 		if !utility.ConfirmPrompt("Install?") {
 			return
@@ -63,7 +81,7 @@ var installCmd = &cobra.Command{
 			stgDir := filepath.Join(ctx.Config.StagingDir, pkg.Name)
 			pkgDir := filepath.Join(ctx.Config.PackagesDir, pkg.Name)
 
-			defer cleanup(stgDir)
+			defer removeDir(stgDir)
 
 			c := make(chan os.Signal, 1)
 			if runtime.GOOS == "windows" {
@@ -73,7 +91,7 @@ var installCmd = &cobra.Command{
 			}
 			go func() {
 				<-c
-				cleanup(stgDir)
+				removeDir(stgDir)
 				os.Exit(1)
 			}()
 
@@ -95,26 +113,20 @@ var installCmd = &cobra.Command{
 
 			if err := pkg.Link(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir); err != nil {
 				pkg.Unlink(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir)
-				if err := utility.SafeRemoveAll(pkgDir, ctx.Config.DataDir); err != nil {
-					panic(err)
-				}
+				removeDir(pkgDir)
 				panic(err)
 			}
 
 			rct, err := receipt.FromPackage(pkg, pkgDir, ctx.Config.ShareDir, ctx.Config.OptDir)
 			if err != nil {
 				pkg.Unlink(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir)
-				if err := utility.SafeRemoveAll(pkgDir, ctx.Config.DataDir); err != nil {
-					panic(err)
-				}
+				removeDir(pkgDir)
 				panic(err)
 			}
 
 			if err := rct.Write(pkgDir); err != nil {
 				pkg.Unlink(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir)
-				if err := utility.SafeRemoveAll(pkgDir, ctx.Config.DataDir); err != nil {
-					panic(err)
-				}
+				removeDir(pkgDir)
 				panic(err)
 			}
 		}

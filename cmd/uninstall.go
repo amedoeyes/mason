@@ -29,10 +29,28 @@ var uninstallCmd = &cobra.Command{
 			receits[rct] = struct{}{}
 		}
 
+		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
 		for rct := range receits {
-			fmt.Printf("%s:%s@%s  ", rct.PrimarySource.PURL.Type, rct.Name, rct.PrimarySource.PURL.Version)
+			if len(rct.PrimarySource.PURL.Type) > maxTypeLen {
+				maxTypeLen = len(rct.PrimarySource.PURL.Type)
+			}
+			if len(rct.Name) > maxNameLen {
+				maxNameLen = len(rct.Name)
+			}
+			if len(rct.PrimarySource.PURL.Version) > maxVerLen {
+				maxVerLen = len(rct.PrimarySource.PURL.Version)
+			}
 		}
-		print("\n\n")
+
+		format := fmt.Sprintf("%%-%ds %%-%ds %%-%ds\n", maxTypeLen, maxNameLen, maxVerLen)
+		for rct := range receits {
+			fmt.Printf(format,
+				rct.PrimarySource.PURL.Type,
+				rct.Name,
+				rct.PrimarySource.PURL.Version,
+			)
+		}
+		println()
 
 		if !utility.ConfirmPrompt("Uninstall?") {
 			return
