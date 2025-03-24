@@ -7,6 +7,7 @@ import (
 
 	package_ "github.com/amedoeyes/mason/pkg/package"
 	"github.com/amedoeyes/mason/pkg/utility"
+	"github.com/package-url/packageurl-go"
 )
 
 const FileName = "mason-receipt.json"
@@ -18,7 +19,8 @@ type Receipt struct {
 }
 
 type PrimarySource struct {
-	ID string `json:"id"`
+	ID   string                `json:"id"`
+	PURL packageurl.PackageURL `json:"-"`
 }
 
 type Links struct {
@@ -36,6 +38,11 @@ func FromFile(path string) (*Receipt, error) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		return nil, err
 	}
+	purl, err := packageurl.FromString(r.PrimarySource.ID)
+	if err != nil {
+		return nil, err
+	}
+	r.PrimarySource.PURL = purl
 	return &r, nil
 }
 
@@ -85,7 +92,8 @@ func FromPackage(p *package_.Package, dir, shareDir, optDir string) (*Receipt, e
 	return &Receipt{
 		Name: p.Name,
 		PrimarySource: PrimarySource{
-			ID: p.Source.PURL.ToString(),
+			ID:   p.Source.PURL.ToString(),
+			PURL: p.Source.PURL,
 		},
 		Links: Links{
 			Bin:   p.ResolveBin(),
