@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"syscall"
 
 	"github.com/amedoeyes/mason/pkg/context"
@@ -50,21 +51,24 @@ var installCmd = &cobra.Command{
 			pkgsToInstall[pkg] = struct{}{}
 		}
 
-		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
+		pkgsSlice := make([]*package_.Package, 0, len(pkgsToInstall))
 		for pkg := range pkgsToInstall {
-			if len(pkg.Source.PURL.Type) > maxTypeLen {
-				maxTypeLen = len(pkg.Source.PURL.Type)
-			}
-			if len(pkg.Name) > maxNameLen {
-				maxNameLen = len(pkg.Name)
-			}
-			if len(pkg.Source.PURL.Version) > maxVerLen {
-				maxVerLen = len(pkg.Source.PURL.Version)
-			}
+			pkgsSlice = append(pkgsSlice, pkg)
 		}
 
-		format := fmt.Sprintf("%%-%ds %%-%ds %%-%ds\n", maxTypeLen, maxNameLen, maxVerLen)
-		for pkg := range pkgsToInstall {
+		sort.Slice(pkgsSlice, func(i, j int) bool {
+			return pkgsSlice[i].Name < pkgsSlice[j].Name
+		})
+
+		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
+		for _, pkg := range pkgsSlice {
+			maxTypeLen = max(maxTypeLen, len(pkg.Source.PURL.Type))
+			maxNameLen = max(maxNameLen, len(pkg.Source.PURL.Name))
+			maxVerLen = max(maxVerLen, len(pkg.Source.PURL.Version))
+		}
+
+		format := fmt.Sprintf("%%-%ds  %%-%ds  %%-%ds\n", maxTypeLen, maxNameLen, maxVerLen)
+		for _, pkg := range pkgsSlice {
 			fmt.Printf(format,
 				pkg.Source.PURL.Type,
 				pkg.Name,
@@ -77,7 +81,7 @@ var installCmd = &cobra.Command{
 			return
 		}
 
-		for pkg := range pkgsToInstall {
+		for _, pkg := range pkgsSlice {
 			stgDir := filepath.Join(ctx.Config.StagingDir, pkg.Name)
 			pkgDir := filepath.Join(ctx.Config.PackagesDir, pkg.Name)
 

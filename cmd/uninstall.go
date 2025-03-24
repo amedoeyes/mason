@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/amedoeyes/mason/pkg/context"
 	"github.com/amedoeyes/mason/pkg/receipt"
@@ -29,21 +30,24 @@ var uninstallCmd = &cobra.Command{
 			receits[rct] = struct{}{}
 		}
 
-		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
-		for rct := range receits {
-			if len(rct.PrimarySource.PURL.Type) > maxTypeLen {
-				maxTypeLen = len(rct.PrimarySource.PURL.Type)
-			}
-			if len(rct.Name) > maxNameLen {
-				maxNameLen = len(rct.Name)
-			}
-			if len(rct.PrimarySource.PURL.Version) > maxVerLen {
-				maxVerLen = len(rct.PrimarySource.PURL.Version)
-			}
+		receiptsSlice := make([]*receipt.Receipt, 0, len(ctx.Receipts))
+		for _, rct := range ctx.Receipts {
+			receiptsSlice = append(receiptsSlice, rct)
 		}
 
-		format := fmt.Sprintf("%%-%ds %%-%ds %%-%ds\n", maxTypeLen, maxNameLen, maxVerLen)
-		for rct := range receits {
+		sort.Slice(receiptsSlice, func(i, j int) bool {
+			return receiptsSlice[i].Name < receiptsSlice[j].Name
+		})
+
+		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
+		for _, rct := range receiptsSlice {
+			maxTypeLen = max(maxTypeLen, len(rct.PrimarySource.PURL.Type))
+			maxNameLen = max(maxNameLen, len(rct.PrimarySource.PURL.Name))
+			maxVerLen = max(maxVerLen, len(rct.PrimarySource.PURL.Version))
+		}
+
+		format := fmt.Sprintf("%%-%ds  %%-%ds  %%-%ds\n", maxTypeLen, maxNameLen, maxVerLen)
+		for _, rct := range receiptsSlice {
 			fmt.Printf(format,
 				rct.PrimarySource.PURL.Type,
 				rct.Name,
@@ -56,7 +60,7 @@ var uninstallCmd = &cobra.Command{
 			return
 		}
 
-		for rct := range receits {
+		for _, rct := range receiptsSlice {
 			pkgDir := filepath.Join(ctx.Config.PackagesDir, rct.Name)
 
 			for dest := range rct.Links.Bin {

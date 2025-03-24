@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"syscall"
 
 	"github.com/amedoeyes/mason/pkg/context"
@@ -66,17 +67,20 @@ var upgradeCmd = &cobra.Command{
 			}
 		}
 
+		pkgsSlice := make([]*package_.Package, 0, len(pkgsToUpgrade))
+		for pkg := range pkgsToUpgrade {
+			pkgsSlice = append(pkgsSlice, pkg)
+		}
+
+		sort.Slice(pkgsSlice, func(i, j int) bool {
+			return pkgsSlice[i].Name < pkgsSlice[j].Name
+		})
+
 		maxTypeLen, maxNameLen, maxVerLen := 0, 0, 0
-		for _, rct := range pkgsToUpgrade {
-			if len(rct.PrimarySource.PURL.Type) > maxTypeLen {
-				maxTypeLen = len(rct.PrimarySource.PURL.Type)
-			}
-			if len(rct.Name) > maxNameLen {
-				maxNameLen = len(rct.Name)
-			}
-			if len(rct.PrimarySource.PURL.Version) > maxVerLen {
-				maxVerLen = len(rct.PrimarySource.PURL.Version)
-			}
+		for _, pkg := range pkgsSlice {
+			maxTypeLen = max(maxTypeLen, len(pkg.Source.PURL.Type))
+			maxNameLen = max(maxNameLen, len(pkg.Source.PURL.Name))
+			maxVerLen = max(maxVerLen, len(pkg.Source.PURL.Version))
 		}
 
 		if len(pkgsToUpgrade) == 0 {
@@ -84,7 +88,8 @@ var upgradeCmd = &cobra.Command{
 		}
 
 		format := fmt.Sprintf("%%-%ds %%-%ds %%-%ds -> %%s\n", maxTypeLen, maxNameLen, maxVerLen)
-		for pkg, rct := range pkgsToUpgrade {
+		for _, pkg := range pkgsSlice {
+			rct := pkgsToUpgrade[pkg]
 			fmt.Printf(format,
 				rct.PrimarySource.PURL.Type,
 				rct.Name,
@@ -98,7 +103,8 @@ var upgradeCmd = &cobra.Command{
 			return
 		}
 
-		for pkg, rct := range pkgsToUpgrade {
+		for _, pkg := range pkgsSlice {
+			rct := pkgsToUpgrade[pkg]
 			stgDir := filepath.Join(ctx.Config.StagingDir, pkg.Name)
 			pkgDir := filepath.Join(ctx.Config.PackagesDir, pkg.Name)
 
