@@ -10,6 +10,7 @@ import (
 
 	"github.com/amedoeyes/mason/pkg/context"
 	package_ "github.com/amedoeyes/mason/pkg/package"
+	"github.com/amedoeyes/mason/pkg/receipt"
 	"github.com/amedoeyes/mason/pkg/utility"
 	"github.com/spf13/cobra"
 )
@@ -36,9 +37,14 @@ var installCmd = &cobra.Command{
 		pkgsToInstall := make(map[*package_.Package]struct{}, len(args))
 
 		for _, p := range args {
+			if _, exists := ctx.Receipts[p]; exists {
+				fmt.Printf("'%s' is already installed\n", p)
+				return
+			}
+
 			pkg, exists := ctx.Packages[p]
 			if !exists {
-				fmt.Printf("Package '%s' does not exist\n", p)
+				fmt.Printf("'%s' does not exist\n", p)
 				return
 			}
 			pkgsToInstall[pkg] = struct{}{}
@@ -47,10 +53,9 @@ var installCmd = &cobra.Command{
 		for pkg := range pkgsToInstall {
 			fmt.Printf("%s:%s@%s  ", pkg.Source.PURL.Type, pkg.Name, pkg.Source.PURL.Version)
 		}
-		println()
+		print("\n\n")
 
-		confirm := utility.ConfirmPrompt("Install?")
-		if !confirm {
+		if !utility.ConfirmPrompt("Install?") {
 			return
 		}
 
@@ -89,6 +94,23 @@ var installCmd = &cobra.Command{
 			}
 
 			if err := pkg.Link(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir); err != nil {
+				pkg.Unlink(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir)
+				if err := utility.SafeRemoveAll(pkgDir, ctx.Config.DataDir); err != nil {
+					panic(err)
+				}
+				panic(err)
+			}
+
+			rct, err := receipt.FromPackage(pkg, pkgDir, ctx.Config.ShareDir, ctx.Config.OptDir)
+			if err != nil {
+				pkg.Unlink(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir)
+				if err := utility.SafeRemoveAll(pkgDir, ctx.Config.DataDir); err != nil {
+					panic(err)
+				}
+				panic(err)
+			}
+
+			if err := rct.Write(pkgDir); err != nil {
 				pkg.Unlink(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir)
 				if err := utility.SafeRemoveAll(pkgDir, ctx.Config.DataDir); err != nil {
 					panic(err)

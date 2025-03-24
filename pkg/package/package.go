@@ -416,17 +416,143 @@ func (p *Package) Build(dir string) error {
 
 func (p *Package) Link(dir, binDir, shareDir, optDir string) error {
 	if p.Bin != nil {
-		for dest, source := range *p.Bin {
-			if strings.Contains(source, ":") {
-				parts := strings.Split(source, ":")
+		for dest, src := range p.ResolveBin() {
+			if err := p.writeScript(dir); err != nil {
+				return err
+			}
+
+			if err := os.Chmod(filepath.Join(dir, src), 0755); err != nil {
+				return err
+			}
+
+			if err := utility.CreateSymlink(filepath.Join(dir, src), filepath.Join(binDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if p.Share != nil {
+		for dest, src := range *p.Share {
+			res, err := utility.ResolveForSymLink(filepath.Join(dir, src), filepath.Join(shareDir, dest))
+			if err != nil {
+				return err
+			}
+			for dest, src := range res {
+				if err := utility.CreateSymlink(src, dest); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if p.Opt != nil {
+		for dest, src := range *p.Opt {
+			res, err := utility.ResolveForSymLink(filepath.Join(dir, src), filepath.Join(optDir, dest))
+			if err != nil {
+				return err
+			}
+			for dest, src := range res {
+				if err := utility.CreateSymlink(src, dest); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Package) Unlink(dir, binDir, shareDir, optDir string) error {
+	if p.Bin != nil {
+		for dest := range p.ResolveBin() {
+			if err := utility.RemoveSymlink(filepath.Join(binDir, dest)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if p.Share != nil {
+		for dest, src := range *p.Share {
+			res, err := utility.ResolveForSymLink(filepath.Join(dir, src), filepath.Join(shareDir, dest))
+			if err != nil {
+				return err
+			}
+			for dest := range res {
+				if err := utility.RemoveSymlink(dest); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if p.Opt != nil {
+		for dest, src := range *p.Opt {
+			res, err := utility.ResolveForSymLink(filepath.Join(dir, src), filepath.Join(optDir, dest))
+			if err != nil {
+				return err
+			}
+			for dest := range res {
+				if err := utility.RemoveSymlink(dest); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Package) ResolveBin() map[string]string {
+	result := map[string]string{}
+
+	if p.Bin != nil {
+		for dest, src := range *p.Bin {
+			if strings.Contains(src, ":") {
+				parts := strings.Split(src, ":")
 				type_, target := parts[0], parts[1]
 
 				switch type_ {
 				case "dotnet", "exec", "gem", "java-jar", "node", "php", "python", "pyvenv", "ruby":
-					source = filepath.Join(dir, utility.SelectByOS(dest, dest+".cmd"))
-					var command string
-					var env []string
+					src = utility.SelectByOS(dest, dest+".cmd")
+				case "cargo":
+					src = filepath.Join("bin", utility.SelectByOS(target, target+".exe"))
+				case "composer":
+					src = filepath.Join("vendor", "bin", utility.SelectByOS(target, target+".bat"))
+				case "golang":
+					src = utility.SelectByOS(target, target+".exe")
+				case "luarocks":
+					src = filepath.Join("bin", utility.SelectByOS(target, target+".bat"))
+				case "npm":
+					src = filepath.Join("node_modules", ".bin", utility.SelectByOS(target, target+".cmd"))
+				case "nuget":
+					src = utility.SelectByOS(target, target+".exe")
+				case "opam":
+					src = filepath.Join("bin", utility.SelectByOS(target, target+".exe"))
+				case "pypi":
+					src = filepath.Join("venv", utility.SelectByOS(filepath.Join("bin", target), filepath.Join("Scripts", target+".exe")))
+				}
+			}
 
+			result[dest] = src
+		}
+	}
+
+	return result
+}
+
+func (p *Package) writeScript(dir string) error {
+	if p.Bin != nil {
+		for dest, src := range *p.Bin {
+			if strings.Contains(src, ":") {
+				parts := strings.Split(src, ":")
+				type_, target := parts[0], parts[1]
+
+				src = filepath.Join(dir, utility.SelectByOS(dest, dest+".cmd"))
+				var command string
+				var env []string
+
+				switch type_ {
+				case "dotnet", "exec", "gem", "java-jar", "node", "php", "python", "pyvenv", "ruby":
 					switch type_ {
 					case "dotnet":
 						command = fmt.Sprintf("dotnet \"%s\"", filepath.Join(dir, target))
@@ -448,110 +574,11 @@ func (p *Package) Link(dir, binDir, shareDir, optDir string) error {
 					case "ruby":
 						command = fmt.Sprintf("ruby \"%s\"", filepath.Join(dir, target))
 					}
-					if err := writeScript(source, command, env); err != nil {
+
+					if err := writeScript(src, command, env); err != nil {
 						return err
 					}
-				case "cargo":
-					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
-				case "composer":
-					source = filepath.Join(dir, "vendor", "bin", utility.SelectByOS(target, target+".bat"))
-				case "golang":
-					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
-				case "luarocks":
-					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".bat"))
-				case "npm":
-					source = filepath.Join(dir, "node_modules", ".bin", utility.SelectByOS(target, target+".cmd"))
-				case "nuget":
-					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
-				case "opam":
-					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
-				case "pypi":
-					source = filepath.Join(dir, "venv", utility.SelectByOS(filepath.Join("bin", target), filepath.Join("Scripts", target+".exe")))
-				default:
-					return fmt.Errorf("resolver for '%s' is not implemented", type_)
 				}
-			} else {
-				source = filepath.Join(dir, source)
-			}
-
-			if err := utility.CreateSymlink(source, filepath.Join(binDir, dest)); err != nil {
-				return err
-			}
-			err := os.Chmod(source, 0755)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	if p.Share != nil {
-		for dest, source := range *p.Share {
-			if err := utility.CreateSymlink(filepath.Join(dir, source), filepath.Join(shareDir, dest)); err != nil {
-				return err
-			}
-		}
-	}
-
-	if p.Opt != nil {
-		for dest, source := range *p.Opt {
-			if err := utility.CreateSymlink(filepath.Join(dir, source), filepath.Join(optDir, dest)); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (p *Package) Unlink(dir, binDir, shareDir, optDir string) error {
-	if p.Bin != nil {
-		for dest, source := range *p.Bin {
-			if strings.Contains(source, ":") {
-				parts := strings.Split(source, ":")
-				type_, target := parts[0], parts[1]
-
-				switch type_ {
-				case "dotnet", "exec", "gem", "java-jar", "node", "php", "python", "pyvenv", "ruby":
-					source = filepath.Join(dir, utility.SelectByOS(dest, dest+".cmd"))
-				case "cargo":
-					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
-				case "composer":
-					source = filepath.Join(dir, "vendor", "bin", utility.SelectByOS(target, target+".bat"))
-				case "golang":
-					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
-				case "luarocks":
-					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".bat"))
-				case "npm":
-					source = filepath.Join(dir, "node_modules", ".bin", utility.SelectByOS(target, target+".cmd"))
-				case "nuget":
-					source = filepath.Join(dir, utility.SelectByOS(target, target+".exe"))
-				case "opam":
-					source = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".exe"))
-				case "pypi":
-					source = filepath.Join(dir, "venv", utility.SelectByOS(filepath.Join("bin", target), filepath.Join("Scripts", target+".exe")))
-				default:
-					return fmt.Errorf("resolver for '%s' is not implemented", type_)
-				}
-			}
-
-			if err := utility.RemoveSymlink(source, filepath.Join(binDir, dest)); err != nil {
-				return err
-			}
-		}
-	}
-
-	if p.Share != nil {
-		for dest, source := range *p.Share {
-			if err := utility.RemoveSymlink(filepath.Join(dir, source), filepath.Join(shareDir, dest)); err != nil {
-				return err
-			}
-		}
-	}
-
-	if p.Opt != nil {
-		for dest, source := range *p.Opt {
-			if err := utility.RemoveSymlink(filepath.Join(dir, source), filepath.Join(optDir, dest)); err != nil {
-				return err
 			}
 		}
 	}

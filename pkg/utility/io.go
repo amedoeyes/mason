@@ -17,89 +17,58 @@ func PathExists(path string) (bool, error) {
 	return true, nil
 }
 
-func CreateSymlink(source, dest string) error {
-	sourceInfo, err := os.Stat(source)
+func ResolveForSymLink(src, dest string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	sourceInfo, err := os.Stat(src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if sourceInfo.IsDir() {
-		return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 
 			if !info.IsDir() {
-				relPath, err := filepath.Rel(source, path)
+				relPath, err := filepath.Rel(src, path)
 				if err != nil {
 					return err
 				}
 
-				dest := filepath.Join(dest, relPath)
-
-				if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-					return err
-				}
-
-				if err := os.Symlink(path, dest); err != nil {
-					return err
-				}
+				result[filepath.Join(dest, relPath)] = path
 			}
 			return nil
 		})
 	} else {
-		return os.Symlink(source, dest)
+		result[dest] = src
 	}
+
+	return result, nil
 }
 
-func RemoveSymlink(source, dest string) error {
-	sourceInfo, err := os.Stat(source)
-	if err != nil {
+func CreateSymlink(src, dest string) error {
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return err
 	}
-
-	if sourceInfo.IsDir() {
-		return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if !info.IsDir() {
-				relPath, err := filepath.Rel(source, path)
-				if err != nil {
-					return err
-				}
-
-				dest := filepath.Join(dest, relPath)
-
-				destInfo, err := os.Stat(dest)
-				if os.IsNotExist(err) {
-					return nil
-				}
-				if err != nil {
-					return err
-				}
-
-				if destInfo.Mode()&os.ModeSymlink != 0 {
-					return os.Remove(dest)
-				}
-			}
-			return nil
-		})
+	if err := os.Symlink(src, dest); err != nil {
+		return err
 	}
+	return nil
+}
 
-	destInfo, err := os.Stat(dest)
+func RemoveSymlink(dest string) error {
+	destInfo, err := os.Lstat(dest)
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-
 	if destInfo.Mode()&os.ModeSymlink != 0 {
 		return os.Remove(dest)
 	}
-
 	return nil
 }
 

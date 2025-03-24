@@ -250,7 +250,6 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 					}
 				}
 			}
-
 		}
 
 		switch v := entries[i].Source.Build.(type) {

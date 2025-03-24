@@ -1,41 +1,67 @@
 package context
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/amedoeyes/mason/config"
 	package_ "github.com/amedoeyes/mason/pkg/package"
+	"github.com/amedoeyes/mason/pkg/receipt"
 	"github.com/amedoeyes/mason/pkg/registry"
+	"github.com/amedoeyes/mason/pkg/utility"
 )
 
 type Context struct {
 	Config     *config.Config
 	Registries []*registry.Registry
 	Packages   map[string]*package_.Package
+	Receipts   map[string]*receipt.Receipt
 }
 
 func NewContext() (*Context, error) {
-	new_ctx := &Context{
+	ctx := &Context{
 		Config: config.NewConfig(),
 	}
-	new_ctx.Registries = make([]*registry.Registry, 0, len(new_ctx.Config.Registries))
+	ctx.Registries = make([]*registry.Registry, 0, len(ctx.Config.Registries))
 
-	for _, r := range new_ctx.Config.Registries {
-		reg, err := registry.NewRegistry(r, new_ctx.Config.RegistriesDir)
+	for _, r := range ctx.Config.Registries {
+		reg, err := registry.NewRegistry(r, ctx.Config.RegistriesDir)
 		if err != nil {
 			return nil, err
 		}
-		new_ctx.Registries = append(new_ctx.Registries, reg)
+		ctx.Registries = append(ctx.Registries, reg)
 	}
 
-	new_ctx.Packages = map[string]*package_.Package{}
-	for _, r := range new_ctx.Registries {
+	ctx.Packages = map[string]*package_.Package{}
+	for _, r := range ctx.Registries {
 		entries, err := r.Load()
 		if err != nil {
 			return nil, err
 		}
 		for _, e := range entries {
-			new_ctx.Packages[e.Name] = package_.NewPackage(e)
+			ctx.Packages[e.Name] = package_.NewPackage(e)
 		}
 	}
 
-	return new_ctx, nil
+	ctx.Receipts = map[string]*receipt.Receipt{}
+	entries, err := os.ReadDir(ctx.Config.PackagesDir)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		rctPath := filepath.Join(ctx.Config.PackagesDir, entry.Name(), receipt.FileName)
+		exist, err := utility.PathExists(rctPath)
+		if err != nil {
+			return nil, err
+		}
+		if exist {
+			rct, err := receipt.FromFile(rctPath)
+			if err != nil {
+				return nil, err
+			}
+			ctx.Receipts[rct.Name] = rct
+		}
+	}
+
+	return ctx, nil
 }
