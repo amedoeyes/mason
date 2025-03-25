@@ -4,12 +4,18 @@ A fast and efficient command-line tool to manage external development tools like
 
 ![demo](https://github.com/user-attachments/assets/2c9aab56-edaa-4972-b24d-24c3a722c844)
 
-## Building
+## Installation
+
+### Binary Releases
+
+You can download binary releases from [here](https://github.com/amedoeyes/mason/releases) .
+
+### Manual
 
 ```sh
 git clone https://github.com/amedoeyes/mason.git
 cd mason
-go build -o mason .
+go build -ldflags="-s -w -X github.com/amedoeyes/mason/cmd.version=$(git describe --tags --always)" -o mason
 ```
 
 ## Usage
