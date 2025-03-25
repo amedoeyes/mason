@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	mason_context "github.com/amedoeyes/mason/pkg/context"
 	"github.com/spf13/cobra"
@@ -12,6 +13,8 @@ import (
 type key string
 
 const contextKey = key("ctx")
+
+var version string
 
 var rootCmd = &cobra.Command{
 	Use:   "mason",
@@ -23,6 +26,7 @@ var rootCmd = &cobra.Command{
 		}
 		cmd.SetContext(context.WithValue(cmd.Context(), contextKey, ctx))
 	},
+	Version: version,
 }
 
 func Execute() {
@@ -33,10 +37,12 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.SetVersionTemplate(fmt.Sprintf("mason {{.Version}} %s/%s\n", runtime.GOOS, runtime.GOARCH))
+
 	rootCmd.AddCommand(installCmd)
-	rootCmd.AddCommand(uninstallCmd)
-	rootCmd.AddCommand(upgradeCmd)
-	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(searchCmd)
+	rootCmd.AddCommand(uninstallCmd)
+	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(upgradeCmd)
 }
