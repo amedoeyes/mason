@@ -14,7 +14,7 @@ go build -o mason .
 
 ## Usage
 
-Add `$HOME/.local/share/mason/bin` to your PATH if you're on Unix, or `%APPDATA%\mason\bin` if you're on Windows. This ensures installed binaries are accessible from anywhere.
+Add `$HOME/.local/share/mason/bin` to your `PATH` if you're on Unix, or `%APPDATA%\mason\bin` if you're on Windows. This ensures installed binaries are accessible from anywhere.
 
 ```
 Usage:
@@ -38,8 +38,8 @@ Use "mason [command] --help" for more information about a command.
 
 ## Environment Variables
 
-- MASON_DATA_DIR: Base directory for data (defaults to `$HOME/.local/share/mason` on Unix and `%APPDATA%\mason` on Windows).
-- MASON_REGISTRIES: Comma-separated list of registries (defaults to `github:mason-org/mason-registry`).
+- `MASON_DATA_DIR`: Base directory for data (defaults to `$HOME/.local/share/mason` on Unix and `%APPDATA%\mason` on Windows).
+- `MASON_REGISTRIES`: Comma-separated list of registries (defaults to `github:mason-org/mason-registry`).
 
 ## Credits
 
