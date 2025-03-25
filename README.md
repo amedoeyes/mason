@@ -2,6 +2,8 @@
 
 A fast and efficient command-line tool to manage external development tools like LSP servers, debuggers, linters, and formatters.
 
+![demo](https://github.com/user-attachments/assets/2c9aab56-edaa-4972-b24d-24c3a722c844)
+
 ## Building
 
 ```sh
