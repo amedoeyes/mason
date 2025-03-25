@@ -558,6 +558,9 @@ func (p *Package) writeScript(dir string) error {
 						command = fmt.Sprintf("dotnet \"%s\"", filepath.Join(dir, target))
 					case "exec":
 						command = filepath.Join(dir, target)
+						if err := os.Chmod(command, 0755); err != nil {
+							return err
+						}
 					case "gem":
 						command = filepath.Join(dir, "bin", utility.SelectByOS(target, target+".bat"))
 						env = []string{fmt.Sprintf("GEM_PATH=%s%s", dir, utility.SelectByOS(":$GEM_PATH", ";%%GEM_PATH%%"))}
