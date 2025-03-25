@@ -29,7 +29,7 @@ var uninstallCmd = &cobra.Command{
 			}
 		}()
 
-		receits := make(map[*receipt.Receipt]struct{}, len(args))
+		receipts := make(map[*receipt.Receipt]struct{}, len(args))
 
 		for _, p := range args {
 			rct, exists := ctx.Receipts[p]
@@ -37,11 +37,11 @@ var uninstallCmd = &cobra.Command{
 				fmt.Printf("'%s' is not installed\n", p)
 				return
 			}
-			receits[rct] = struct{}{}
+			receipts[rct] = struct{}{}
 		}
 
 		receiptsSlice := make([]*receipt.Receipt, 0, len(ctx.Receipts))
-		for _, rct := range ctx.Receipts {
+		for rct := range receipts {
 			receiptsSlice = append(receiptsSlice, rct)
 		}
 
