@@ -344,7 +344,9 @@ func (r *Registry) Load() ([]*RegistryEntry, error) {
 			prev = string(entryStr)
 			res, err := renderTemplate(string(entryStr), ctx)
 			if err != nil {
-				return nil, err
+				fmt.Printf("'%s' expression error: %s\n", entries[i].Name, err)
+				entries[i] = nil
+				break
 			}
 			entryStr = []byte(res)
 		}

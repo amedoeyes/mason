@@ -13,7 +13,7 @@ func renderTemplate(template string, context map[string]any) (string, error) {
 	re := regexp.MustCompile(`{{\s*(.*?)\s*}}`)
 	var outErr error
 	result := re.ReplaceAllStringFunc(template, func(match string) string {
-		value, err := evalTemplate(re.FindStringSubmatch(match)[1], context)
+		value, err := evalExpr(re.FindStringSubmatch(match)[1], context)
 		if err != nil {
 			outErr = err
 			return ""
@@ -136,8 +136,8 @@ var functions = map[string]func(args any) (any, error){
 	},
 }
 
-func evalTemplate(template string, context map[string]any) (any, error) {
-	parts := strings.Split(template, "|")
+func evalExpr(expr string, context map[string]any) (any, error) {
+	parts := strings.Split(expr, "|")
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])
 	}
@@ -159,7 +159,7 @@ func evalTemplate(template string, context map[string]any) (any, error) {
 			openIdx := strings.Index(filter, "(")
 			closeIdx := strings.LastIndex(filter, ")")
 			if openIdx == -1 || closeIdx == -1 || closeIdx < openIdx {
-				return nil, fmt.Errorf("invalid filter syntax: %s", filter)
+				return nil, fmt.Errorf("invalid filter syntax '%s' in '%s'", filter, expr)
 			}
 
 			filtName = strings.TrimSpace(filter[:openIdx])
@@ -186,7 +186,7 @@ func evalTemplate(template string, context map[string]any) (any, error) {
 
 		filterFunc, ok := filters[filtName]
 		if !ok {
-			return nil, fmt.Errorf("unknown filter: %s", filtName)
+			return nil, fmt.Errorf("unknown filter '%s' in '%s'", filtName, expr)
 		}
 
 		value, err = filterFunc(value, arg)
@@ -211,7 +211,7 @@ func evalValue(expr string, context map[string]any) (any, error) {
 
 	value, ok := context[parts[0]]
 	if !ok {
-		return nil, fmt.Errorf("variable %s not found", parts[0])
+		return nil, fmt.Errorf("variable '%s' not found in '%s'", parts[0], expr)
 	}
 
 	for _, part := range parts[1:] {
@@ -221,29 +221,29 @@ func evalValue(expr string, context map[string]any) (any, error) {
 			value = nil
 		}
 		if value == nil {
-			return nil, fmt.Errorf("cannot resolve attribute/key %s", part)
+			return nil, fmt.Errorf("cannot resolve attribute/key '%s' in '%s'", part, expr)
 		}
 	}
 
 	return value, nil
 }
 
-func evalArg(argStr string, context map[string]any) (any, error) {
-	if strings.TrimSpace(argStr) == "" {
+func evalArg(expr string, context map[string]any) (any, error) {
+	if strings.TrimSpace(expr) == "" {
 		return "", nil
 	}
 
 	var arg any
 
-	if strings.Contains(argStr, "(") && strings.HasSuffix(argStr, ")") {
-		openIdx := strings.Index(argStr, "(")
-		closeIdx := strings.LastIndex(argStr, ")")
+	if strings.Contains(expr, "(") && strings.HasSuffix(expr, ")") {
+		openIdx := strings.Index(expr, "(")
+		closeIdx := strings.LastIndex(expr, ")")
 		if openIdx == -1 || closeIdx == -1 || closeIdx < openIdx {
-			return nil, fmt.Errorf("invalid function syntax in argument: %s", argStr)
+			return nil, fmt.Errorf("invalid function syntax in argument '%s'", expr)
 		}
 
-		funcName := strings.TrimSpace(argStr[:openIdx])
-		innerArgStr := argStr[openIdx+1 : closeIdx]
+		funcName := strings.TrimSpace(expr[:openIdx])
+		innerArgStr := expr[openIdx+1 : closeIdx]
 		funcArg, err := evalArg(innerArgStr, context)
 		if err != nil {
 			return nil, err
@@ -251,7 +251,7 @@ func evalArg(argStr string, context map[string]any) (any, error) {
 
 		funcFunc, ok := functions[funcName]
 		if !ok {
-			return nil, fmt.Errorf("unknown function: %s", funcName)
+			return nil, fmt.Errorf("unknown function '%s' in '%s'", funcName, expr)
 		}
 
 		arg, err = funcFunc(funcArg)
@@ -259,14 +259,14 @@ func evalArg(argStr string, context map[string]any) (any, error) {
 			return nil, err
 		}
 	} else {
-		str, err := parseString(argStr)
+		str, err := parseString(expr)
 		if err == nil {
 			arg = str
 		} else {
-			if val, ok := context[argStr]; ok {
+			if val, ok := context[expr]; ok {
 				arg = val
 			} else {
-				arg = argStr
+				arg = expr
 			}
 		}
 	}
