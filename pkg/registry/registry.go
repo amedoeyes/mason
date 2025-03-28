@@ -315,7 +315,7 @@ func (r *Registry) Load() ([]*RegistryEntry, error) {
 				}
 			}
 
-			switch entries[i].Source.Download.(type) {
+			switch entries[i].Source.Build.(type) {
 			case []any:
 				entries[i] = nil
 				continue
