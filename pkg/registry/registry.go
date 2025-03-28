@@ -195,8 +195,8 @@ func (r *Registry) Update() error {
 	return nil
 }
 
-func (r *Registry) Load() ([]RegistryEntry, error) {
-	var entries []RegistryEntry
+func (r *Registry) Load() ([]*RegistryEntry, error) {
+	var entries []*RegistryEntry
 
 	switch r.Kind {
 	case "github":
@@ -222,7 +222,7 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 				return nil, err
 			}
 
-			var entry RegistryEntry
+			var entry *RegistryEntry
 			err = yaml.Unmarshal(data, &entry)
 			if err != nil {
 				return nil, err
@@ -258,27 +258,11 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 					}
 				}
 			}
-		}
 
-		switch v := entries[i].Source.Build.(type) {
-		case []any:
-			for _, item := range v {
-				switch v := item.(map[string]any)["target"].(type) {
-				case string:
-					if utility.IsPlatform(v) {
-						entries[i].Source.Build = item
-						break
-					}
-				case []any:
-					var strSlice []string
-					for _, val := range v {
-						strSlice = append(strSlice, val.(string))
-					}
-					if utility.IsPlatform(strSlice...) {
-						entries[i].Source.Build = item
-						break
-					}
-				}
+			switch entries[i].Source.Asset.(type) {
+			case []any:
+				entries[i] = nil
+				continue
 			}
 		}
 
@@ -301,6 +285,40 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 						break
 					}
 				}
+			}
+
+			switch entries[i].Source.Download.(type) {
+			case []any:
+				entries[i] = nil
+				continue
+			}
+		}
+
+		switch v := entries[i].Source.Build.(type) {
+		case []any:
+			for _, item := range v {
+				switch v := item.(map[string]any)["target"].(type) {
+				case string:
+					if utility.IsPlatform(v) {
+						entries[i].Source.Build = item
+						break
+					}
+				case []any:
+					var strSlice []string
+					for _, val := range v {
+						strSlice = append(strSlice, val.(string))
+					}
+					if utility.IsPlatform(strSlice...) {
+						entries[i].Source.Build = item
+						break
+					}
+				}
+			}
+
+			switch entries[i].Source.Download.(type) {
+			case []any:
+				entries[i] = nil
+				continue
 			}
 		}
 
@@ -336,5 +354,12 @@ func (r *Registry) Load() ([]RegistryEntry, error) {
 		}
 	}
 
-	return entries, nil
+	filteredEntries := entries[:0]
+	for _, v := range entries {
+		if v != nil {
+			filteredEntries = append(filteredEntries, v)
+		}
+	}
+
+	return filteredEntries, nil
 }

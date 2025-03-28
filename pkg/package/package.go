@@ -54,7 +54,7 @@ type Build struct {
 	Env *[]string
 }
 
-func NewPackage(entry registry.RegistryEntry) *Package {
+func NewPackage(entry *registry.RegistryEntry) *Package {
 	pkg := &Package{
 		Name:        entry.Name,
 		Description: entry.Description,
