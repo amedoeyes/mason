@@ -57,5 +57,5 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ env.TAG_NAME }}
-          name: Release ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
           artifacts: "*.tar.gz"
