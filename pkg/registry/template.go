@@ -204,14 +204,45 @@ func evalValue(expr string, context map[string]any) (any, error) {
 		return str, nil
 	}
 
+	if strings.Contains(expr, "(") && strings.HasSuffix(expr, ")") {
+		openIdx := strings.Index(expr, "(")
+		closeIdx := strings.LastIndex(expr, ")")
+		if openIdx == -1 || closeIdx == -1 || closeIdx < openIdx {
+			return nil, fmt.Errorf("invalid function syntax '%s'", expr)
+		}
+
+		filterName := strings.TrimSpace(expr[:openIdx])
+		var args [2]any
+
+		argStr1 := expr[openIdx+1 : strings.Index(expr, ",")]
+		arg1, err := evalArg(argStr1, context)
+		if err != nil {
+			return nil, err
+		}
+		args[0] = arg1
+
+		argStr2 := expr[strings.Index(expr, ",")+1 : closeIdx]
+		arg2, err := evalArg(argStr2, context)
+		if err != nil {
+			return nil, err
+		}
+		args[1] = arg2
+
+		res, err := filters[filterName](args[1], args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		return res, nil
+	}
+
 	parts := strings.Split(expr, ".")
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])
 	}
-
 	value, ok := context[parts[0]]
 	if !ok {
-		return nil, fmt.Errorf("variable '%s' not found in '%s'", parts[0], expr)
+		return nil, fmt.Errorf("identifier '%s' not found in '%s'", parts[0], expr)
 	}
 
 	for _, part := range parts[1:] {
