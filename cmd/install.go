@@ -89,7 +89,20 @@ var installCmd = &cobra.Command{
 			stgDir := filepath.Join(ctx.Config.StagingDir, pkg.Name)
 			pkgDir := filepath.Join(ctx.Config.PackagesDir, pkg.Name)
 
-			defer removeDir(stgDir)
+			promoteDir := pkg.Source.PURL.Type == "pypi" || pkg.Source.PURL.Type == "luarocks"
+
+			var downDir string
+			if promoteDir {
+				downDir = pkgDir
+			} else {
+				downDir = stgDir
+			}
+
+			defer func() {
+				if !promoteDir {
+					removeDir(stgDir)
+				}
+			}()
 
 			c := make(chan os.Signal, 1)
 			if runtime.GOOS == "windows" {
@@ -99,24 +112,26 @@ var installCmd = &cobra.Command{
 			}
 			go func() {
 				<-c
-				removeDir(stgDir)
+				removeDir(downDir)
 				os.Exit(1)
 			}()
 
-			if err := os.MkdirAll(stgDir, 0755); err != nil {
+			if err := os.MkdirAll(downDir, 0o755); err != nil {
 				panic(err)
 			}
 
-			if err := pkg.Download(stgDir); err != nil {
+			if err := pkg.Download(downDir); err != nil {
 				panic(err)
 			}
 
-			if err := pkg.Build(stgDir); err != nil {
+			if err := pkg.Build(downDir); err != nil {
 				panic(err)
 			}
 
-			if err := os.Rename(stgDir, pkgDir); err != nil {
-				panic(err)
+			if !promoteDir {
+				if err := os.Rename(stgDir, pkgDir); err != nil {
+					panic(err)
+				}
 			}
 
 			if err := pkg.Link(pkgDir, ctx.Config.BinDir, ctx.Config.ShareDir, ctx.Config.OptDir); err != nil {
