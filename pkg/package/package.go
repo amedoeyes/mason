@@ -132,6 +132,10 @@ func NewPackage(entry *registry.RegistryEntry) *Package {
 }
 
 func (p *Package) Download(dir string) error {
+	if p.Source.Download == nil {
+		return nil
+	}
+
 	run := func(cmd []string, env []string) error {
 		if len(cmd) == 0 {
 			return errors.New("empty command")
@@ -226,7 +230,7 @@ func (p *Package) Download(dir string) error {
 						outDir = filepath.Join(outDir, dest)
 						outPath = filepath.Join(outDir, source)
 
-						if err := os.MkdirAll(outDir, 0755); err != nil {
+						if err := os.MkdirAll(outDir, 0o755); err != nil {
 							return err
 						}
 						if err := utility.DownloadGithubRelease(repo, source, version, outDir); err != nil {
@@ -314,7 +318,7 @@ func (p *Package) Download(dir string) error {
 			downCmd = append(downCmd, *p.Source.ExtraPackages...)
 		}
 
-		if err := os.WriteFile(filepath.Join(dir, ".npmrc"), []byte("install-strategy=shallow"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".npmrc"), []byte("install-strategy=shallow"), 0o644); err != nil {
 			return err
 		}
 		if err := run(initCmd, nil); err != nil {
@@ -421,7 +425,7 @@ func (p *Package) Link(dir, binDir, shareDir, optDir string) error {
 				return err
 			}
 
-			if err := os.Chmod(filepath.Join(dir, src), 0755); err != nil {
+			if err := os.Chmod(filepath.Join(dir, src), 0o755); err != nil {
 				return err
 			}
 
@@ -558,7 +562,7 @@ func (p *Package) writeScript(dir string) error {
 						command = fmt.Sprintf("dotnet \"%s\"", filepath.Join(dir, target))
 					case "exec":
 						command = filepath.Join(dir, target)
-						if err := os.Chmod(command, 0755); err != nil {
+						if err := os.Chmod(command, 0o755); err != nil {
 							return err
 						}
 					case "gem":
@@ -600,5 +604,5 @@ func writeScript(outPath, command string, env []string) error {
 		envLines = append(envLines, fmt.Sprintf("%s %s", utility.SelectByOS("export", "SET"), e))
 	}
 	content := fmt.Sprintf(scriptTemplate, strings.Join(envLines, "\n"), command)
-	return os.WriteFile(outPath, []byte(content), 0755)
+	return os.WriteFile(outPath, []byte(content), 0o755)
 }
