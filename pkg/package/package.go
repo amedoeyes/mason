@@ -132,10 +132,6 @@ func NewPackage(entry *registry.RegistryEntry) *Package {
 }
 
 func (p *Package) Download(dir string) error {
-	if p.Source.Download == nil {
-		return nil
-	}
-
 	run := func(cmd []string, env []string) error {
 		if len(cmd) == 0 {
 			return errors.New("empty command")
@@ -201,6 +197,10 @@ func (p *Package) Download(dir string) error {
 		}
 
 	case "generic":
+		if p.Source.Download == nil {
+			return nil
+		}
+
 		for outPath, url := range *p.Source.Download.Files {
 			if err := utility.DownloadFile(url, outPath); err != nil {
 				return err
@@ -343,6 +343,10 @@ func (p *Package) Download(dir string) error {
 		}
 
 	case "openvsx":
+		if p.Source.Download == nil {
+			return nil
+		}
+
 		outPath := filepath.Join(dir, *p.Source.Download.File)
 		url := fmt.Sprintf("https://open-vsx.org/api/%s/%s/%s/file/%s", namespace, name, version, *p.Source.Download.File)
 
